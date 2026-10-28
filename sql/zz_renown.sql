@@ -197,3 +197,7 @@ INSERT INTO npc_vendor (entry,item,maxcount,incrtime,slot,condition_id,comments)
 (190101,22740,0,0,70,59106,'Renown tier 6'),
 (190101,22741,0,0,71,59106,'Renown tier 6'),
 (190101,22747,0,0,72,59106,'Renown tier 6');
+
+-- Renown rewards are earned, not bought: no gold cost and no vendor sell value (stops a free-gold loop).
+-- Items also sold by other vendors (e.g. Superior Healing/Mana Draught) keep their normal price.
+UPDATE item_template i JOIN npc_vendor v ON v.item=i.entry AND v.entry IN (190100,190101) SET i.BuyPrice=0, i.SellPrice=0 WHERE NOT EXISTS (SELECT 1 FROM npc_vendor o WHERE o.item=i.entry AND o.entry NOT IN (190100,190101,14753,14754));
