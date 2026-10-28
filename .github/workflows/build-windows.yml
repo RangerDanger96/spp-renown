@@ -70,11 +70,13 @@ jobs:
       - { name: trainingdummies, uses: actions/checkout@v4, with: { repository: flekz-games/cmangos-trainingdummies, ref: d00323521680b76eebbe03d9c498c84ec85e7bbf, path: deps/trainingdummies } }
       - { name: balancing, uses: actions/checkout@v4, with: { repository: flekz-games/cmangos-balancing, ref: ca556e406bdfd97cfcbcad4f171573d2d44776f7, path: deps/balancing } }
 
-      - name: Apply server patches (7 battleground brackets, level 1 battlegrounds for bots)
+      - name: Apply server patches (7 battleground brackets, level 1 battlegrounds for bots, vendor purchase hooks)
         shell: bash
         run: |
           git -C core apply --whitespace=nowarn "$GITHUB_WORKSPACE/renown-repo/patches/core.patch"
           git -C core/src/modules/PlayerBots apply --whitespace=nowarn "$GITHUB_WORKSPACE/renown-repo/patches/playerbots.patch"
+          git -C deps/modules apply --whitespace=nowarn "$GITHUB_WORKSPACE/renown-repo/patches/modules.patch"
+          grep -n "OnPreBuyItem" deps/modules/src/Module.h
           grep -n "MAX_BATTLEGROUND_BRACKETS  7" core/src/game/BattleGround/BattleGround.h
 
       - name: Register the Renown module

@@ -5,6 +5,7 @@
 #include "Chat/Chat.h"
 #include "Database/DatabaseEnv.h"
 #include "Entities/Creature.h"
+#include "Entities/Item.h"
 #include "Entities/Player.h"
 #include "Globals/ObjectMgr.h"
 #include "Log/Log.h"
@@ -46,7 +47,18 @@ namespace cmangos_module
             "PRIMARY KEY (`guid`)"
             ") ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='Renown PvP progression'");
 
-        sLog.outString("Renown module initialized (max rank %u)", GetConfig()->maxRank);
+        // Spendable Renown points (added with the Renown vendor currency). Existing characters start with
+        // everything they have earned so far.
+        auto column = CharacterDatabase.Query("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'custom_renown' AND COLUMN_NAME = 'spendable'");
+        if (!column)
+        {
+            CharacterDatabase.DirectExecute("ALTER TABLE `custom_renown` ADD COLUMN `spendable` INT UNSIGNED NOT NULL DEFAULT '0' AFTER `points`");
+            CharacterDatabase.DirectExecute("UPDATE `custom_renown` SET `spendable` = `points`");
+        }
+
+        LoadVendorCosts();
+
+        sLog.outString("Renown module initialized (max rank %u, %u items cost Renown)", GetConfig()->maxRank, (uint32)m_vendorCosts.size());
     }
 
     void RenownModule::OnLoadFromDB(Player* player)
@@ -59,11 +71,12 @@ namespace cmangos_module
         const uint32 playerId = player->GetObjectGuid().GetCounter();
 
         RenownData data;
-        auto result = CharacterDatabase.PQuery("SELECT `points` FROM `custom_renown` WHERE `guid` = '%u'", playerId);
+        auto result = CharacterDatabase.PQuery("SELECT `points`, `spendable` FROM `custom_renown` WHERE `guid` = '%u'", playerId);
         if (result)
         {
             Field* fields = result->Fetch();
             data.points = fields[0].GetUInt32();
+            data.spendable = fields[1].GetUInt32();
         }
 
         data.rank = GetConfig()->GetRankForPoints(data.points);
@@ -93,10 +106,15 @@ namespace cmangos_module
             data = it->second;
         }
 
-        if (data.points > 0)
+        if (data.points > 0 || data.spendable > 0)
         {
-            CharacterDatabase.PExecute("REPLACE INTO `custom_renown` (`guid`, `points`, `rank`) VALUES ('%u', '%u', '%u')", playerId, data.points, data.rank);
+            SaveData(playerId, data);
         }
+    }
+
+    void RenownModule::SaveData(uint32 playerId, const RenownData& data)
+    {
+        CharacterDatabase.PExecute("REPLACE INTO `custom_renown` (`guid`, `points`, `spendable`, `rank`) VALUES ('%u', '%u', '%u', '%u')", playerId, data.points, data.spendable, data.rank);
     }
 
     void RenownModule::OnDeleteFromDB(uint32 playerId)
@@ -352,6 +370,183 @@ namespace cmangos_module
         }
     }
 
+    void RenownModule::LoadVendorCosts()
+    {
+        std::unordered_map<uint32, uint32> costs;
+        auto result = WorldDatabase.Query("SELECT `item`, `cost` FROM `custom_renown_vendor`");
+        if (result)
+        {
+            do
+            {
+                Field* fields = result->Fetch();
+                if (fields[1].GetUInt32() > 0)
+                {
+                    costs[fields[0].GetUInt32()] = fields[1].GetUInt32();
+                }
+            }
+            while (result->NextRow());
+        }
+        else
+        {
+            sLog.outString("Renown: table custom_renown_vendor is missing or empty, all vendor items cost gold");
+        }
+
+        std::lock_guard<std::mutex> lock(m_vendorMutex);
+        m_vendorCosts.swap(costs);
+    }
+
+    uint32 RenownModule::GetRenownCost(uint32 itemId) const
+    {
+        std::lock_guard<std::mutex> lock(m_vendorMutex);
+        auto itr = m_vendorCosts.find(itemId);
+        return itr != m_vendorCosts.end() ? itr->second : 0;
+    }
+
+    bool RenownModule::OnPreBuyItem(Player* player, Creature* vendor, uint32 itemId, uint32 count, uint32& price)
+    {
+        if (!player || !GetConfig()->enabled)
+        {
+            return false;
+        }
+
+        const uint32 cost = GetRenownCost(itemId) * std::max<uint32>(count, 1);
+        if (!cost)
+        {
+            return false;   // normal gold item
+        }
+
+        const RenownData data = GetData(player->GetObjectGuid().GetCounter());
+        if (data.spendable < cost)
+        {
+            ChatHandler(player).PSendSysMessage("|cffffd100[Renown]|r That costs %u Renown points. You have %u.", cost, data.spendable);
+            player->SendBuyError(BUY_ERR_NOT_ENOUGHT_MONEY, vendor, itemId, 0);
+            return true;
+        }
+
+        price = 0;          // paid with Renown in OnBuyItem once the item is in the bags
+        return false;
+    }
+
+    void RenownModule::OnBuyItem(Player* player, Creature* vendor, Item* item, uint32 count)
+    {
+        if (!player || !item || !GetConfig()->enabled)
+        {
+            return;
+        }
+
+        const uint32 cost = GetRenownCost(item->GetEntry()) * std::max<uint32>(count, 1);
+        if (!cost)
+        {
+            return;
+        }
+
+        const uint32 playerId = player->GetObjectGuid().GetCounter();
+        uint32 left = 0;
+        RenownData saved;
+        {
+            std::lock_guard<std::mutex> lock(m_dataMutex);
+            RenownData& data = m_data[playerId];
+            data.spendable = data.spendable > cost ? data.spendable - cost : 0;
+            left = data.spendable;
+            saved = data;
+        }
+
+        SaveData(playerId, saved);
+        ChatHandler(player).PSendSysMessage("|cffffd100[Renown]|r Spent %u Renown points. %u left.", cost, left);
+        SendAddonUpdate(player);
+    }
+
+    void RenownModule::SendAddonPrices(Player* player) const
+    {
+        if (!player || !player->isRealPlayer() || !player->GetSession())
+        {
+            return;
+        }
+
+        std::vector<std::pair<uint32, uint32>> costs;
+        {
+            std::lock_guard<std::mutex> lock(m_vendorMutex);
+            costs.assign(m_vendorCosts.begin(), m_vendorCosts.end());
+        }
+
+        // Format: RENOWNP<tab>item=cost,item=cost,...  (several messages, each well below the 255 character limit)
+        auto flush = [player](const std::string& body)
+        {
+            const std::string message = "RENOWNP\t" + body;
+            WorldPacket packet;
+            ChatHandler::BuildChatPacket(packet, CHAT_MSG_PARTY, message.c_str(), LANG_ADDON, CHAT_TAG_NONE, player->GetObjectGuid(), player->GetName());
+            player->GetSession()->SendPacket(packet);
+        };
+
+        std::string body;
+        for (const auto& entry : costs)
+        {
+            const std::string part = std::to_string(entry.first) + "=" + std::to_string(entry.second);
+            if (body.size() + part.size() + 1 > 200)
+            {
+                flush(body);
+                body.clear();
+            }
+
+            body += (body.empty() ? "" : ",") + part;
+        }
+
+        if (!body.empty())
+        {
+            flush(body);
+        }
+    }
+
+    bool RenownModule::HandleGiveCommand(WorldSession* session, const std::string& args)
+    {
+        Player* self = session ? session->GetPlayer() : nullptr;
+        if (!self || !GetConfig()->enabled)
+        {
+            return false;
+        }
+
+        const std::vector<std::string> arguments = helper::SplitString(args, " ");
+        if (arguments.empty() || !helper::IsValidNumberString(arguments[0]))
+        {
+            ChatHandler(self).PSendSysMessage("Usage: .renown give <points> [character name]  (spendable points only, rank unchanged)");
+            return true;
+        }
+
+        Player* target = ResolveCommandTarget(session, arguments.size() > 1 ? arguments[1] : "");
+        if (!target)
+        {
+            ChatHandler(self).PSendSysMessage("That character is not online.");
+            return true;
+        }
+
+        const long amount = std::strtol(arguments[0].c_str(), nullptr, 10);
+        const uint32 playerId = target->GetObjectGuid().GetCounter();
+        RenownData saved;
+        {
+            std::lock_guard<std::mutex> lock(m_dataMutex);
+            RenownData& data = m_data[playerId];
+            data.spendable = (uint32)std::max<long>(0, (long)data.spendable + amount);
+            saved = data;
+        }
+
+        SaveData(playerId, saved);
+        SendAddonUpdate(target);
+        SendStatus(self, target);
+        return true;
+    }
+
+    bool RenownModule::HandleReloadCommand(WorldSession* session, const std::string& args)
+    {
+        LoadVendorCosts();
+        if (Player* self = session ? session->GetPlayer() : nullptr)
+        {
+            ChatHandler(self).PSendSysMessage("Renown vendor prices reloaded (%u items).", (uint32)m_vendorCosts.size());
+            SendAddonPrices(self);
+        }
+
+        return true;
+    }
+
     bool RenownModule::OnPreGossipHello(Player* player, Creature* creature)
     {
         if (!player || !creature || !GetConfig()->enabled)
@@ -415,6 +610,8 @@ namespace cmangos_module
             RenownData& data = m_data[playerId];
             const uint64 total = (uint64)data.points + gained;
             data.points = total > 4000000000ULL ? 4000000000U : (uint32)total;
+            const uint64 spendable = (uint64)data.spendable + gained;
+            data.spendable = spendable > 4000000000ULL ? 4000000000U : (uint32)spendable;
             oldRank = data.rank;
             newRank = GetConfig()->GetRankForPoints(data.points);
             data.rank = newRank;
@@ -438,16 +635,23 @@ namespace cmangos_module
         const uint32 playerId = player->GetObjectGuid().GetCounter();
         uint32 oldRank = 1;
         uint32 newRank = 1;
+        RenownData saved;
         {
             std::lock_guard<std::mutex> lock(m_dataMutex);
             RenownData& data = m_data[playerId];
+            if (points > data.points)
+            {
+                data.spendable += points - data.points;   // raising renown also gives the difference to spend
+            }
+
             data.points = points;
             oldRank = data.rank;
             newRank = GetConfig()->GetRankForPoints(points);
             data.rank = newRank;
+            saved = data;
         }
 
-        CharacterDatabase.PExecute("REPLACE INTO `custom_renown` (`guid`, `points`, `rank`) VALUES ('%u', '%u', '%u')", playerId, points, newRank);
+        SaveData(playerId, saved);
 
         if (newRank != oldRank)
         {
@@ -555,6 +759,8 @@ namespace cmangos_module
             handler.PSendSysMessage("|cffffd100[Renown]|r %s: Renown Rank %u (%s). %u / %u renown to rank %u.",
                 about->GetName(), data.rank, GetRankTitle(data.rank).c_str(), data.points - current, next - current, data.rank + 1);
         }
+
+        handler.PSendSysMessage("|cffffd100[Renown]|r %u Renown points to spend.", data.spendable);
     }
 
     void RenownModule::SendAddonUpdate(Player* player) const
@@ -579,10 +785,11 @@ namespace cmangos_module
         const uint32 current = config->GetPointsForRank(data.rank);
         const uint32 next = maxed ? current : config->GetPointsForRank(data.rank + 1);
 
-        // Format: RENOWN<tab>rank:progress:needed:nextRank:total:maxed:title
+        // Format: RENOWN<tab>rank:progress:needed:nextRank:total:maxed:spendable:title
         std::ostringstream message;
         message << "RENOWN\t" << data.rank << ":" << (data.points - current) << ":" << (next - current) << ":"
-                << (maxed ? data.rank : data.rank + 1) << ":" << data.points << ":" << (maxed ? 1 : 0) << ":" << GetRankTitle(data.rank);
+                << (maxed ? data.rank : data.rank + 1) << ":" << data.points << ":" << (maxed ? 1 : 0) << ":"
+                << data.spendable << ":" << GetRankTitle(data.rank);
 
         // A party addon message from the player to themself: the 1.12 client raises CHAT_MSG_ADDON and shows nothing in chat
         WorldPacket packet;
@@ -611,7 +818,9 @@ namespace cmangos_module
             { "top", std::bind(&RenownModule::HandleTopCommand, this, std::placeholders::_1, std::placeholders::_2), SEC_PLAYER },
             { "sync", std::bind(&RenownModule::HandleSyncCommand, this, std::placeholders::_1, std::placeholders::_2), SEC_PLAYER },
             { "add", std::bind(&RenownModule::HandleAddCommand, this, std::placeholders::_1, std::placeholders::_2), SEC_GAMEMASTER },
-            { "set", std::bind(&RenownModule::HandleSetCommand, this, std::placeholders::_1, std::placeholders::_2), SEC_GAMEMASTER }
+            { "set", std::bind(&RenownModule::HandleSetCommand, this, std::placeholders::_1, std::placeholders::_2), SEC_GAMEMASTER },
+            { "give", std::bind(&RenownModule::HandleGiveCommand, this, std::placeholders::_1, std::placeholders::_2), SEC_GAMEMASTER },
+            { "reload", std::bind(&RenownModule::HandleReloadCommand, this, std::placeholders::_1, std::placeholders::_2), SEC_ADMINISTRATOR }
         };
 
         return &commandTable;
@@ -676,6 +885,7 @@ namespace cmangos_module
 
         // Silent: only the addon data is sent
         SendAddonUpdate(self);
+        SendAddonPrices(self);
         return true;
     }
 

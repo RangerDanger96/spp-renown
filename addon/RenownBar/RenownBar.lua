@@ -9,6 +9,9 @@ local BG_POLL_INTERVAL = 30    -- seconds, while inside a battleground
 local WORLD_POLL_INTERVAL = 180
 
 local rank, title, current, needed, nextRank, total, maxed = nil
+local spendable = nil          -- Renown points available to spend at vendors
+local prices = {}              -- item id -> Renown cost (sent by the server)
+local priceByName = {}         -- item name -> Renown cost (filled from the item cache)
 local lastQuery = 0
 local pendingSuppress = 0      -- number of status replies to hide from chat
 local queryDeadline = 0
@@ -80,6 +83,9 @@ bar:SetScript("OnEnter", function()
             GameTooltip:AddLine(current .. " / " .. needed .. " renown to rank " .. nextRank, 0.9, 0.9, 0.9)
             GameTooltip:AddLine((needed - current) .. " renown remaining", 0.7, 0.7, 0.7)
         end
+        if spendable then
+            GameTooltip:AddLine(spendable .. " Renown points to spend at the Battleground Quartermaster", 1, 0.82, 0)
+        end
     else
         GameTooltip:AddLine("No data from the server yet.", 0.8, 0.8, 0.8)
     end
@@ -94,11 +100,11 @@ local function Refresh()
     if maxed then
         bar:SetMinMaxValues(0, 1)
         bar:SetValue(1)
-        text:SetText("Renown Rank " .. rank .. " (" .. title .. ") - MAX")
+        text:SetText("Renown Rank " .. rank .. " (" .. title .. ") - MAX" .. (spendable and ("   |cffffd100" .. spendable .. " to spend|r") or ""))
     else
         bar:SetMinMaxValues(0, math.max(needed, 1))
         bar:SetValue(current)
-        text:SetText("Renown Rank " .. rank .. " (" .. title .. ")   " .. current .. " / " .. needed)
+        text:SetText("Renown Rank " .. rank .. " (" .. title .. ")   " .. current .. " / " .. needed .. (spendable and ("   |cffffd100" .. spendable .. " to spend|r") or ""))
     end
 end
 
@@ -121,16 +127,114 @@ local function QueryLater(seconds)
     if not delayedQueryAt or at < delayedQueryAt then delayedQueryAt = at end
 end
 
--- Handles a pushed update: "rank:progress:needed:nextRank:total:maxed:title"
+-- Handles a pushed update: "rank:progress:needed:nextRank:total:maxed:spendable:title"
+-- (older servers send "rank:progress:needed:nextRank:total:maxed:title")
+local MerchantRefresh
 local function ParsePush(msg)
-    local _, _, r, c, n, nr, tot, mx, t = string.find(msg or "", "^(%d+):(%d+):(%d+):(%d+):(%d+):(%d):(.*)$")
+    local _, _, r, c, n, nr, tot, mx, sp, t = string.find(msg or "", "^(%d+):(%d+):(%d+):(%d+):(%d+):(%d):(%d+):(.*)$")
+    if not r then
+        _, _, r, c, n, nr, tot, mx, t = string.find(msg or "", "^(%d+):(%d+):(%d+):(%d+):(%d+):(%d):(.*)$")
+        sp = nil
+    end
     if not r then return end
     rank, current, needed, nextRank, total, title = tonumber(r), tonumber(c), tonumber(n), tonumber(nr), tonumber(tot), t
+    spendable = sp and tonumber(sp) or nil
+    if MerchantRefresh then MerchantRefresh() end
     maxed = (mx == "1")
     available = true
     pushMode = true
     syncDeadline = nil
     Refresh()
+end
+
+-- Handles the price list: "item=cost,item=cost,..."
+local function ParsePrices(msg)
+    for id, cost in string.gfind(msg or "", "(%d+)=(%d+)") do
+        prices[tonumber(id)] = tonumber(cost)
+    end
+    if MerchantRefresh then MerchantRefresh() end
+end
+
+local function CostForMerchantIndex(index)
+    if GetMerchantItemLink then
+        local link = GetMerchantItemLink(index)
+        if link then
+            local _, _, id = string.find(link, "item:(%d+)")
+            if id and prices[tonumber(id)] then return prices[tonumber(id)] end
+        end
+    end
+    local name = GetMerchantItemInfo(index)
+    if name and not priceByName[name] then
+        for id, cost in pairs(prices) do
+            local itemName = GetItemInfo(id)
+            if itemName then priceByName[itemName] = cost end
+        end
+    end
+    return name and priceByName[name]
+end
+
+-- Vendor window: show "N Renown" instead of the gold price for Renown items
+local labels = {}
+local merchantTotal
+MerchantRefresh = function()
+    if not MerchantFrame or not MerchantFrame:IsVisible() then return end
+    local perPage = MERCHANT_ITEMS_PER_PAGE or 10
+    local showingBuy = (not MerchantFrame.selectedTab) or MerchantFrame.selectedTab == 1
+    local anyRenown = false
+    for i = 1, perPage do
+        local moneyFrame = getglobal("MerchantItem" .. i .. "MoneyFrame")
+        local button = getglobal("MerchantItem" .. i)
+        if not labels[i] and button then
+            labels[i] = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            if moneyFrame then labels[i]:SetPoint("BOTTOMLEFT", moneyFrame, "BOTTOMLEFT", 0, 2) end
+        end
+        local label = labels[i]
+        local index = ((MerchantFrame.page or 1) - 1) * perPage + i
+        local cost = showingBuy and index <= GetMerchantNumItems() and CostForMerchantIndex(index)
+        if label then
+            if cost then
+                anyRenown = true
+                if moneyFrame then moneyFrame:Hide() end
+                if spendable and spendable < cost then
+                    label:SetText("|cffff2020" .. cost .. " Renown|r")
+                else
+                    label:SetText("|cffffd100" .. cost .. " Renown|r")
+                end
+                label:Show()
+            else
+                label:Hide()
+            end
+        end
+    end
+    if not merchantTotal then
+        merchantTotal = MerchantFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        merchantTotal:SetPoint("BOTTOMLEFT", MerchantFrame, "BOTTOMLEFT", 28, 92)
+    end
+    if anyRenown and spendable then
+        merchantTotal:SetText("Renown points: " .. spendable)
+        merchantTotal:Show()
+    else
+        merchantTotal:Hide()
+    end
+end
+
+if MerchantFrame_UpdateMerchantInfo then
+    local Original_UpdateMerchantInfo = MerchantFrame_UpdateMerchantInfo
+    function MerchantFrame_UpdateMerchantInfo()
+        Original_UpdateMerchantInfo()
+        MerchantRefresh()
+    end
+end
+
+-- Vendor tooltip: add the Renown cost
+local Original_SetMerchantItem = GameTooltip.SetMerchantItem
+GameTooltip.SetMerchantItem = function(self, index)
+    Original_SetMerchantItem(self, index)
+    local cost = CostForMerchantIndex(index)
+    if cost then
+        self:AddLine("Costs " .. cost .. " Renown points", 1, 0.82, 0)
+        self:Show()
+    end
 end
 
 local function Sync()
@@ -177,6 +281,12 @@ function ChatFrame_OnEvent(event)
         if string.find(plain, "^%[Renown%] " .. UnitName("player") .. ": Renown Rank") then
             return
         end
+        local _, _, sp = string.find(plain, "^%[Renown%] (%d+) Renown points to spend%.")
+        if sp then
+            spendable = tonumber(sp)
+            Refresh()
+            return
+        end
     end
     Original_ChatFrame_OnEvent(event)
 end
@@ -198,6 +308,8 @@ bar:RegisterEvent("CHAT_MSG_COMBAT_HONOR_GAIN")
 bar:RegisterEvent("PLAYER_PVP_KILLS_CHANGED")
 bar:RegisterEvent("UPDATE_BATTLEFIELD_STATUS")
 bar:RegisterEvent("UPDATE_BATTLEFIELD_SCORE")
+bar:RegisterEvent("MERCHANT_SHOW")
+bar:RegisterEvent("MERCHANT_UPDATE")
 
 bar:SetScript("OnEvent", function()
     if event == "VARIABLES_LOADED" then
@@ -206,7 +318,12 @@ bar:SetScript("OnEvent", function()
     elseif event == "PLAYER_ENTERING_WORLD" then
         Sync()
     elseif event == "CHAT_MSG_ADDON" then
-        if arg1 == "RENOWN" and arg4 == UnitName("player") then ParsePush(arg2) end
+        if arg4 == UnitName("player") then
+            if arg1 == "RENOWN" then ParsePush(arg2)
+            elseif arg1 == "RENOWNP" then ParsePrices(arg2) end
+        end
+    elseif event == "MERCHANT_SHOW" or event == "MERCHANT_UPDATE" then
+        MerchantRefresh()
     elseif event == "CHAT_MSG_SYSTEM" then
         if ParseStatus(arg1) then
             if pendingSuppress > 0 then pendingSuppress = pendingSuppress - 1 end

@@ -1,0 +1,61 @@
+diff --git a/src/Module.h b/src/Module.h
+index cc45c95..dd9df70 100644
+--- a/src/Module.h
++++ b/src/Module.h
+@@ -117,6 +117,10 @@ namespace cmangos_module
+         virtual void OnSellItem(Player* player, Item* item, uint32 money) {}
+         // Called when a player buys back a sold item from a vendor
+         virtual void OnBuyBackItem(Player* player, Item* item, uint32 money) {}
++        // Called before a player buys an item from a vendor. Modules may change the gold price (copper). Return true to cancel the purchase
++        virtual bool OnPreBuyItem(Player* player, Creature* vendor, uint32 itemId, uint32 count, uint32& price) { return false; }
++        // Called after a player has bought an item from a vendor
++        virtual void OnBuyItem(Player* player, Creature* vendor, Item* item, uint32 count) {}
+         // Called when a player creates an item
+         virtual void OnCreateItem(Player* player, Item* item, uint32 amount) {}
+ 
+diff --git a/src/ModuleMgr.cpp b/src/ModuleMgr.cpp
+index 75786c8..c03d941 100644
+--- a/src/ModuleMgr.cpp
++++ b/src/ModuleMgr.cpp
+@@ -1050,6 +1050,28 @@ namespace cmangos_module
+         }
+     }
+ 
++    bool ModuleMgr::OnPreBuyItem(Player* player, Creature* vendor, uint32 itemId, uint32 count, uint32& price)
++    {
++        bool cancel = false;
++        for (Module* mod : modules)
++        {
++            if (mod->OnPreBuyItem(player, vendor, itemId, count, price))
++            {
++                cancel = true;
++            }
++        }
++
++        return cancel;
++    }
++
++    void ModuleMgr::OnBuyItem(Player* player, Creature* vendor, Item* item, uint32 count)
++    {
++        for (Module* mod : modules)
++        {
++            mod->OnBuyItem(player, vendor, item, count);
++        }
++    }
++
+     void ModuleMgr::OnBuyBackItem(Player* player, Item* item, uint32 money)
+     {
+         for (Module* mod : modules)
+diff --git a/src/ModuleMgr.h b/src/ModuleMgr.h
+index 89923d0..5b0223f 100644
+--- a/src/ModuleMgr.h
++++ b/src/ModuleMgr.h
+@@ -70,6 +70,8 @@ namespace cmangos_module
+         void OnEquipItem(Player* player, Item* item);
+         void OnSellItem(Player* player, Item* item, uint32 money);
+         void OnBuyBackItem(Player* player, Item* item, uint32 money);
++        bool OnPreBuyItem(Player* player, Creature* vendor, uint32 itemId, uint32 count, uint32& price);
++        void OnBuyItem(Player* player, Creature* vendor, Item* item, uint32 count);
+         void OnCreateItem(Player* player, Item* item, uint32 amount);
+ 
+         // Player Gossip Hooks

@@ -30,6 +30,10 @@ namespace cmangos_module
         void OnGetPlayerLevelInfo(Player* player, PlayerLevelInfo& info) override;
         void OnGetPlayerClassLevelInfo(Player* player, PlayerClassLevelInfo& info) override;
 
+        // Vendor hooks: items listed in custom_renown_vendor cost Renown points instead of gold
+        bool OnPreBuyItem(Player* player, Creature* vendor, uint32 itemId, uint32 count, uint32& price) override;
+        void OnBuyItem(Player* player, Creature* vendor, Item* item, uint32 count) override;
+
         // Battleground hooks
         void OnUpdatePlayerScore(BattleGround* battleground, Player* player, uint8 scoreType, uint32 value) override;
         void OnEndBattleGround(BattleGround* battleground, uint32 winnerTeam) override;
@@ -46,7 +50,8 @@ namespace cmangos_module
     private:
         struct RenownData
         {
-            uint32 points = 0;
+            uint32 points = 0;      // lifetime renown (decides the rank, never goes down)
+            uint32 spendable = 0;   // renown points available to spend at vendors
             uint32 rank = 1;
             uint64 lastVictim = 0;
             time_t lastVictimTime = 0;
@@ -79,11 +84,22 @@ namespace cmangos_module
         bool HandleAddCommand(WorldSession* session, const std::string& args);
         bool HandleSetCommand(WorldSession* session, const std::string& args);
         bool HandleSyncCommand(WorldSession* session, const std::string& args);
+        bool HandleGiveCommand(WorldSession* session, const std::string& args);
+        bool HandleReloadCommand(WorldSession* session, const std::string& args);
+
+        void LoadVendorCosts();
+        uint32 GetRenownCost(uint32 itemId) const;
+        void SaveData(uint32 playerId, const RenownData& data);
+        // Sends the renown item prices to the RenownBar addon so the vendor window can show "X Renown"
+        void SendAddonPrices(Player* player) const;
         Player* ResolveCommandTarget(WorldSession* session, const std::string& name) const;
 
     private:
         std::unordered_map<uint32, RenownData> m_data;
         mutable std::mutex m_dataMutex;
+
+        std::unordered_map<uint32, uint32> m_vendorCosts; // item entry -> renown cost
+        mutable std::mutex m_vendorMutex;
 
         std::unordered_map<uint32, uint32> m_bolster;   // player guid -> bolstered level
         mutable std::mutex m_bolsterMutex;

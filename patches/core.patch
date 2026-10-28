@@ -121,3 +121,31 @@ index 6e711ae..db7f79a 100644
  
  class BattleGroundWS : public BattleGround
  {
+diff --git a/src/game/Entities/Player.cpp b/src/game/Entities/Player.cpp
+index 223f2a9..200a03a 100644
+--- a/src/game/Entities/Player.cpp
++++ b/src/game/Entities/Player.cpp
+@@ -18198,6 +18198,12 @@ bool Player::BuyItemFromVendor(ObjectGuid vendorGuid, uint32 item, uint8 count,
+     // reputation discount
+     price = uint32(floor(price * GetReputationPriceDiscount(pCreature)));
+ 
++#ifdef ENABLE_MODULES
++    // SPP Renown: modules may replace the gold price (e.g. Renown point costs) or cancel the purchase
++    if (sModuleMgr.OnPreBuyItem(this, pCreature, item, count, price))
++        return false;
++#endif
++
+     if (GetMoney() < price)
+     {
+         SendBuyError(BUY_ERR_NOT_ENOUGHT_MONEY, pCreature, item, 0);
+@@ -18252,6 +18258,10 @@ bool Player::BuyItemFromVendor(ObjectGuid vendorGuid, uint32 item, uint8 count,
+     if (!pItem)
+         return false;
+ 
++#ifdef ENABLE_MODULES
++    sModuleMgr.OnBuyItem(this, pCreature, pItem, count);
++#endif
++
+     uint32 new_count = pCreature->UpdateVendorItemCurrentCount(crItem, totalCount);
+ 
+     WorldPacket data(SMSG_BUY_ITEM, 8 + 4 + 4 + 4);

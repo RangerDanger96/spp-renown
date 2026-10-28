@@ -52,6 +52,11 @@
 #        .renown sync               Silently refresh the RenownBar addon
 #        .renown add <points> [name]  (GM) Add or remove renown
 #        .renown set <rank> [name]    (GM) Set a renown rank
+#        .renown give <points> [name] (GM) Add or remove spendable Renown points (rank unchanged)
+#        .renown reload               (Admin) Reload Renown vendor prices from custom_renown_vendor
+#
+#    Renown points are also a currency: items listed in the world table custom_renown_vendor cost that many
+#    spendable Renown points instead of gold (zz_renown.sql fills it for the Battleground Quartermasters).
 #
 ###################################################################################################################
 
