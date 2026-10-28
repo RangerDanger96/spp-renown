@@ -105,13 +105,14 @@ w("DELETE g0 FROM gossip_menu g0 JOIN gossip_menu g1 ON g1.entry=g0.entry AND g1
 w("UPDATE gossip_menu SET condition_id=0 WHERE condition_id IN (107,1011) AND entry IN (SELECT menu_id FROM tmp_bm);")
 w("DROP TEMPORARY TABLE IF EXISTS tmp_bm;")
 w("")
-w("-- Spawns")
+w("-- Spawns: fixed guids 9100300-9100323 (auto-increment guids could collide with other custom spawn ranges)")
+w("DELETE FROM creature WHERE guid BETWEEN 9100300 AND 9100399;")
 rows=[]
 for r in layout:
     if r['role']=='quartermaster': e=QM_A if r['side']=='A' else QM_H
     else: e=BM[r['side']][r['role']][0]
-    rows.append(f"({e},{r['map']},1,{r['x']},{r['y']},{r['z']},{r['o']},25,25,0,0) -- {r['area']} {r['role']}")
-w("INSERT INTO creature (id,map,spawnMask,position_x,position_y,position_z,orientation,spawntimesecsmin,spawntimesecsmax,spawndist,MovementType) VALUES")
+    rows.append(f"({9100300+len(rows)},{e},{r['map']},1,{r['x']},{r['y']},{r['z']},{r['o']},25,25,0,0) -- {r['area']} {r['role']}")
+w("INSERT INTO creature (guid,id,map,spawnMask,position_x,position_y,position_z,orientation,spawntimesecsmin,spawntimesecsmax,spawndist,MovementType) VALUES")
 for k,row in enumerate(rows):
     body,cmt=row.split(' -- ')
     w(body+(";" if k==len(rows)-1 else ",")+" -- "+cmt)

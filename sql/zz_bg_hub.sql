@@ -321,29 +321,30 @@ DELETE g0 FROM gossip_menu g0 JOIN gossip_menu g1 ON g1.entry=g0.entry AND g1.co
 UPDATE gossip_menu SET condition_id=0 WHERE condition_id IN (107,1011) AND entry IN (SELECT menu_id FROM tmp_bm);
 DROP TEMPORARY TABLE IF EXISTS tmp_bm;
 
--- Spawns
-INSERT INTO creature (id,map,spawnMask,position_x,position_y,position_z,orientation,spawntimesecsmin,spawntimesecsmax,spawndist,MovementType) VALUES
-(190100,0,1,-8943.882,-136.901,83.783,2.5133,25,25,0,0), -- Northshire Valley quartermaster
-(190102,0,1,-8942.614,-134.052,83.78,2.9322,25,25,0,0), -- Northshire Valley wsg
-(190103,0,1,-8942.614,-130.934,83.681,3.351,25,25,0,0), -- Northshire Valley ab
-(190104,0,1,-8943.882,-128.085,83.566,3.7699,25,25,0,0), -- Northshire Valley av
-(190100,0,1,-6234.753,326.007,382.729,2.4072,25,25,0,0), -- Coldridge Valley quartermaster
-(190102,0,1,-6233.19,328.706,382.918,2.8261,25,25,0,0), -- Coldridge Valley wsg
-(190103,0,1,-6232.86,331.807,383.134,3.245,25,25,0,0), -- Coldridge Valley ab
-(190104,0,1,-6233.82,334.775,383.228,3.6639,25,25,0,0), -- Coldridge Valley av
-(190100,1,1,10312.344,824.036,1326.467,1.7104,25,25,0,0), -- Shadowglen quartermaster
-(190102,1,1,10315.274,825.103,1326.439,2.1293,25,25,0,0), -- Shadowglen wsg
-(190103,1,1,10317.518,827.269,1326.428,2.5482,25,25,0,0), -- Shadowglen ab
-(190104,1,1,10318.686,830.161,1326.426,2.9671,25,25,0,0), -- Shadowglen av
-(190101,1,1,-612.45,-4256.078,39.006,2.5133,25,25,0,0), -- Valley of Trials quartermaster
-(190105,1,1,-611.182,-4253.229,39.006,2.9322,25,25,0,0), -- Valley of Trials wsg
-(190106,1,1,-611.182,-4250.111,39.006,3.351,25,25,0,0), -- Valley of Trials ab
-(190107,1,1,-612.45,-4247.262,39.006,3.7699,25,25,0,0), -- Valley of Trials av
-(190101,1,1,-2911.512,-262.388,53.212,2.5133,25,25,0,0), -- Camp Narache quartermaster
-(190105,1,1,-2910.244,-259.539,53.024,2.9322,25,25,0,0), -- Camp Narache wsg
-(190106,1,1,-2910.244,-256.421,52.991,3.351,25,25,0,0), -- Camp Narache ab
-(190107,1,1,-2911.512,-253.572,52.991,3.7699,25,25,0,0), -- Camp Narache av
-(190101,0,1,1669.082,1666.318,140.888,4.1095,25,25,0,0), -- Deathknell quartermaster
-(190105,0,1,1666.202,1667.513,141.297,4.5284,25,25,0,0), -- Deathknell wsg
-(190106,0,1,1663.084,1667.434,141.051,4.9473,25,25,0,0), -- Deathknell ab
-(190107,0,1,1660.269,1666.093,141.016,5.3662,25,25,0,0); -- Deathknell av
+-- Spawns: fixed guids 9100300-9100323 (auto-increment guids could collide with other custom spawn ranges)
+DELETE FROM creature WHERE guid BETWEEN 9100300 AND 9100399;
+INSERT INTO creature (guid,id,map,spawnMask,position_x,position_y,position_z,orientation,spawntimesecsmin,spawntimesecsmax,spawndist,MovementType) VALUES
+(9100300,190100,0,1,-8943.882,-136.901,83.783,2.5133,25,25,0,0), -- Northshire Valley quartermaster
+(9100301,190102,0,1,-8942.614,-134.052,83.78,2.9322,25,25,0,0), -- Northshire Valley wsg
+(9100302,190103,0,1,-8942.614,-130.934,83.681,3.351,25,25,0,0), -- Northshire Valley ab
+(9100303,190104,0,1,-8943.882,-128.085,83.566,3.7699,25,25,0,0), -- Northshire Valley av
+(9100304,190100,0,1,-6234.753,326.007,382.729,2.4072,25,25,0,0), -- Coldridge Valley quartermaster
+(9100305,190102,0,1,-6233.19,328.706,382.918,2.8261,25,25,0,0), -- Coldridge Valley wsg
+(9100306,190103,0,1,-6232.86,331.807,383.134,3.245,25,25,0,0), -- Coldridge Valley ab
+(9100307,190104,0,1,-6233.82,334.775,383.228,3.6639,25,25,0,0), -- Coldridge Valley av
+(9100308,190100,1,1,10312.344,824.036,1326.467,1.7104,25,25,0,0), -- Shadowglen quartermaster
+(9100309,190102,1,1,10315.274,825.103,1326.439,2.1293,25,25,0,0), -- Shadowglen wsg
+(9100310,190103,1,1,10317.518,827.269,1326.428,2.5482,25,25,0,0), -- Shadowglen ab
+(9100311,190104,1,1,10318.686,830.161,1326.426,2.9671,25,25,0,0), -- Shadowglen av
+(9100312,190101,1,1,-612.45,-4256.078,39.006,2.5133,25,25,0,0), -- Valley of Trials quartermaster
+(9100313,190105,1,1,-611.182,-4253.229,39.006,2.9322,25,25,0,0), -- Valley of Trials wsg
+(9100314,190106,1,1,-611.182,-4250.111,39.006,3.351,25,25,0,0), -- Valley of Trials ab
+(9100315,190107,1,1,-612.45,-4247.262,39.006,3.7699,25,25,0,0), -- Valley of Trials av
+(9100316,190101,1,1,-2911.512,-262.388,53.212,2.5133,25,25,0,0), -- Camp Narache quartermaster
+(9100317,190105,1,1,-2910.244,-259.539,53.024,2.9322,25,25,0,0), -- Camp Narache wsg
+(9100318,190106,1,1,-2910.244,-256.421,52.991,3.351,25,25,0,0), -- Camp Narache ab
+(9100319,190107,1,1,-2911.512,-253.572,52.991,3.7699,25,25,0,0), -- Camp Narache av
+(9100320,190101,0,1,1669.082,1666.318,140.888,4.1095,25,25,0,0), -- Deathknell quartermaster
+(9100321,190105,0,1,1666.202,1667.513,141.297,4.5284,25,25,0,0), -- Deathknell wsg
+(9100322,190106,0,1,1663.084,1667.434,141.051,4.9473,25,25,0,0), -- Deathknell ab
+(9100323,190107,0,1,1660.269,1666.093,141.016,5.3662,25,25,0,0); -- Deathknell av
