@@ -11,11 +11,11 @@ VARIANTS=[
  ("lcast",  2, {INT:0.45,STA:0.30,SPI:0.25}, "Hide"),       # druid / shaman healers
  ("mail",   3, {STR:0.55,STA:0.45},          "Chain"),      # warrior, paladin
 ]
-ARMOR_SLOTS=[(5,"Tunic",1.0,[5,20]),(7,"Leggings",1.0,[7]),(10,"Gloves",0.75,[10]),(8,"Boots",0.75,[8]),(6,"Belt",0.75,[6])]
-VARIANT_SLOTNAME={"cloth":{5:"Robe",7:"Pants",10:"Gloves",8:"Slippers",6:"Sash"},
-                  "lagi":{5:"Jerkin",7:"Pants",10:"Gloves",8:"Boots",6:"Belt"},
-                  "lcast":{5:"Vest",7:"Leggings",10:"Handwraps",8:"Boots",6:"Cord"},
-                  "mail":{5:"Hauberk",7:"Legguards",10:"Gauntlets",8:"Sabatons",6:"Girdle"}}
+ARMOR_SLOTS=[(5,"Tunic",1.0,[5,20]),(7,"Leggings",1.0,[7]),(1,"Helm",0.9,[1]),(3,"Shoulders",0.75,[3]),(10,"Gloves",0.75,[10]),(8,"Boots",0.75,[8]),(6,"Belt",0.75,[6]),(9,"Bracers",0.5,[9])]
+VARIANT_SLOTNAME={"cloth":{5:"Robe",7:"Pants",1:"Cowl",3:"Mantle",10:"Gloves",8:"Slippers",6:"Sash",9:"Cuffs"},
+                  "lagi":{5:"Jerkin",7:"Pants",1:"Cap",3:"Shoulderpads",10:"Gloves",8:"Boots",6:"Belt",9:"Bracers"},
+                  "lcast":{5:"Vest",7:"Leggings",1:"Headband",3:"Spaulders",10:"Handwraps",8:"Boots",6:"Cord",9:"Wristwraps"},
+                  "mail":{5:"Hauberk",7:"Legguards",1:"Helm",3:"Pauldrons",10:"Gauntlets",8:"Sabatons",6:"Girdle",9:"Bracers"}}
 ACCESSORIES=[ # (class,subclass,invtypes,name,weight,stats)
  (4,1,[16],"Cloak of Fury",0.55,{STR:0.5,STA:0.5}),
  (4,1,[16],"Cloak of Swiftness",0.55,{AGI:0.5,STA:0.5}),
@@ -23,6 +23,9 @@ ACCESSORIES=[ # (class,subclass,invtypes,name,weight,stats)
  (4,0,[11],"Band of Fury",0.55,{STR:0.5,STA:0.5}),
  (4,0,[11],"Band of Swiftness",0.55,{AGI:0.5,STA:0.5}),
  (4,0,[11],"Band of Insight",0.55,{INT:0.6,STA:0.4}),
+ (4,0,[2],"Pendant of Fury",0.55,{STR:0.5,STA:0.5}),
+ (4,0,[2],"Pendant of Swiftness",0.55,{AGI:0.5,STA:0.5}),
+ (4,0,[2],"Pendant of Insight",0.55,{INT:0.6,STA:0.4}),
 ]
 WEAPONS=[ # (class,subclass,invtypes,name,weight,stats)
  (2,7,[13,21],"Longsword",0.6,{STR:0.5,STA:0.5}),
@@ -38,13 +41,15 @@ BRACKETS=[ # (key, title prefix, required level, base target level, stat budget 
  ("t0","Recruit's",1,9,8),
  ("t1","Skirmisher's",10,19,14),
 ]
-def base(cls,sub,invs,target):
+def base(cls,sub,invs,target,span=3):
     inv=",".join(map(str,invs))
     r=q(f"""SELECT entry FROM item_template WHERE class={cls} AND subclass={sub} AND InventoryType IN ({inv})
-        AND Quality IN (2,3) AND RandomProperty=0 AND RequiredLevel BETWEEN {max(1,target-6)} AND {target+3}
+        AND Quality IN (2,3) AND RandomProperty=0 AND RequiredLevel BETWEEN {max(1,target-6)} AND {target+span}
         AND entry<190000 AND name NOT LIKE '%Deprecated%' AND name NOT LIKE '%Test%' AND name NOT LIKE '%Monster%'
         ORDER BY ABS(CAST(RequiredLevel AS SIGNED)-{target}), Quality DESC, entry LIMIT 1""")
-    return int(r[0][0]) if r else None
+    if r: return int(r[0][0])
+    if span<30: return base(cls,sub,invs,target,span+6)
+    return None
 def stats(weights,budget):
     out=[];left=budget
     items=sorted(weights.items(),key=lambda kv:-kv[1])
@@ -62,11 +67,23 @@ def build():
             for inv,_,wt,invs in ARMOR_SLOTS:
                 b=base(4,sub,invs,target)
                 items.append(dict(entry=eid,bracket=bkey,base=b,name=f"{prefix} {stem} {VARIANT_SLOTNAME[vkey][inv]}",
-                                  req=req,ilvl=target+3,stats=stats(wts,round(budget*wt)),weight=wt)); eid+=1
+                                  req=req,ilvl=target+3,stats=stats(wts,round(budget*wt)),weight=wt,scale_armor=True)); eid+=1
         for cls,sub,invs,nm,wt,wts in ACCESSORIES+WEAPONS:
             b=base(cls,sub,invs,target)
             items.append(dict(entry=eid,bracket=bkey,base=b,name=f"{prefix} {nm}",req=req,ilvl=target+3,
                               stats=stats(wts,round(budget*wt)),weight=wt)); eid+=1
+    # Keep the item IDs of the first release (190600-190667) stable; slots added later get 190700+
+    OLD_SLOTS=[5,7,10,8,6]; OLD_ACC=6
+    old=[]
+    for bkey,prefix,req,target,budget in BRACKETS:
+        for vkey,sub,wts,stem in VARIANTS:
+            for inv in OLD_SLOTS: old.append(f"{prefix} {stem} {VARIANT_SLOTNAME[vkey][inv]}")
+        for cls,sub,invs,nm,wt,wts in ACCESSORIES[:OLD_ACC]+WEAPONS: old.append(f"{prefix} {nm}")
+    oldid={n:190600+i for i,n in enumerate(old)}
+    nxt=190700
+    for it in items:
+        if it["name"] in oldid: it["entry"]=oldid[it["name"]]
+        else: it["entry"]=nxt; nxt+=1
     return items
 if __name__=="__main__":
     for it in build(): print(it["entry"],it["base"],it["name"],it["stats"])

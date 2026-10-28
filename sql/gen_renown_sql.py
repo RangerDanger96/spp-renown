@@ -31,6 +31,13 @@ w("-- One condition per tier: player owns the insignia (bags or bank). IDs 59101
 w("DELETE FROM conditions WHERE condition_entry BETWEEN 59101 AND 59106 OR condition_entry BETWEEN 5310111 AND 5310116 OR (type=23 AND value1 BETWEEN 190520 AND 190525);")
 w("INSERT INTO conditions (condition_entry,type,value1,value2,value3,value4,flags,comments) VALUES")
 w(",\n".join("({},23,{},1,0,0,0,'Renown: owns Renown Insignia Tier {}')".format(59101+i,item,i+1) for i,(rank,item,lo,hi) in enumerate(TIERS))+";")
+w("-- Level filters for the low-level sets (a vendor shows at most 128 items, so each player only sees gear for their level):")
+w("-- 59110 level <= 9 (Recruit's), 59111 level 10-19 (uses existing 107 'level >= 10' and 326 'level <= 19'), 59112 = 59111 AND tier 1 insignia (Skirmisher's)")
+w("DELETE FROM conditions WHERE condition_entry BETWEEN 59110 AND 59112;")
+w("INSERT INTO conditions (condition_entry,type,value1,value2,value3,value4,flags,comments) VALUES")
+w("(59110,15,9,2,0,0,0,'Renown: player level <= 9'),")
+w("(59111,-1,107,326,0,0,0,'Renown: player level 10-19'),")
+w("(59112,-1,59111,59101,0,0,0,'Renown: level 10-19 and Renown tier 1');")
 w("")
 w("-- Quartermasters become vendors too")
 w("UPDATE creature_template SET NpcFlags = (NpcFlags & ~128) | 4 WHERE Entry IN (190100,190101); -- 4 = vendor in 1.12 (128 is innkeeper)")
@@ -45,10 +52,12 @@ SLOT_MULT={1:0.9,3:0.9,5:1.0,20:1.0,7:1.0,17:1.0,10:0.75,8:0.75,6:0.75,9:0.5,16:
 def cost(base,inv): return max(5,int(round(base*SLOT_MULT.get(inv,0.7)/5.0))*5)
 
 gear=lowgear.build()
-w("-- Low-level PvP gear: Recruit's (levels 1-9, open to all) and Skirmisher's (levels 10-19, Renown tier 1)")
-w("DELETE FROM item_template WHERE entry BETWEEN 190600 AND 190699;")
+w("-- Low-level PvP gear: Recruit's (shown to levels 1-9) and Skirmisher's (shown to levels 10-19 with Renown tier 1)")
+w("DELETE FROM item_template WHERE entry BETWEEN 190600 AND 190799;")
 for it in gear:
-    sets=[f"entry={it['entry']}", "name='"+it['name'].replace("'","''")+"'", "Quality=3", f"ItemLevel={it['ilvl']}",
+    # armor first: MySQL applies SET left to right, so ItemLevel is still the base item's here
+    sets=[f"armor=IF(ItemLevel>{it['ilvl']}, ROUND(armor*{it['ilvl']}/ItemLevel), armor)" if it.get('scale_armor') else "armor=armor",
+          f"entry={it['entry']}", "name='"+it['name'].replace("'","''")+"'", "Quality=3", f"ItemLevel={it['ilvl']}",
           f"RequiredLevel={it['req']}", "BuyCount=1", "SellPrice=0", "bonding=1", "AllowableClass=-1", "AllowableRace=-1",
           "RandomProperty=0", "itemset=0", "description='Renown reward'", "Flags=0", "RequiredReputationFaction=0",
           "RequiredReputationRank=0", "requiredhonorrank=0", "startquest=0", "minMoneyLoot=0", "maxMoneyLoot=0"]
@@ -70,9 +79,9 @@ for qm,src in [(190100,14753),(190101,14754)]:
     k=0
     for it in gear:
         inv=int(q(f"select InventoryType from item_template where entry={it['base']}")[0][0])
-        cond=0 if it['bracket']=='t0' else 59101
+        cond=59110 if it['bracket']=='t0' else 59112
         costs[it['entry']]=cost(T0_COST if it['bracket']=='t0' else TIER_COST[0], inv)
-        rows.append(f"({qm},{it['entry']},0,0,{k},{cond},'Renown {'open' if cond==0 else 'tier 1'}')"); k+=1
+        rows.append(f"({qm},{it['entry']},0,0,{k},{cond},'Renown {'levels 1-9' if cond==59110 else 'levels 10-19, tier 1'}')"); k+=1
     items=q(f"select v.item,i.RequiredLevel,i.class,i.InventoryType from npc_vendor v join item_template i on i.entry=v.item where v.entry={src} order by i.RequiredLevel,v.item")
     for item,req,cls,inv in items:
         t=tier_for(int(req))
