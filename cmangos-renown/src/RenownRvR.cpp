@@ -20,6 +20,8 @@
 #include "Log/Log.h"
 #include "Maps/Map.h"
 #include "Server/Opcodes.h"
+#include "Spells/SpellMgr.h"
+#include "Server/SQLStorages.h"
 #include "Server/WorldPacket.h"
 #include "Server/WorldSession.h"
 #include "World/World.h"
@@ -368,14 +370,20 @@ namespace cmangos_module
         const bool alliance = team == ALLIANCE;
         const Point home = alliance ? RVR_ALLIANCE_COMMAND : RVR_HORDE_COMMAND;
         Point target = alliance ? RVR_HORDE_COMMAND : RVR_ALLIANCE_COMMAND;   // siege: the enemy commander
+        std::vector<Point> open;
         for (int k = 0; k < 3; ++k)
         {
             const RvRObjective& o = m_rvrObjectives[alliance ? 2 - k : k];
             if (o.owner != team)
             {
-                target = { o.x, o.y, o.z };
-                break;
+                open.push_back({ o.x, o.y, o.z });
             }
+        }
+
+        if (!open.empty())
+        {
+            // Mostly the nearest objective to take, sometimes the next one
+            target = open[(open.size() > 1 && urand(0, 2) == 0) ? 1 : 0];
         }
 
         // Stage a little on the team's own side of the target
@@ -383,7 +391,7 @@ namespace cmangos_module
         const float len = std::max(1.0f, std::sqrt(dx * dx + dy * dy));
         const float back = std::min(30.0f, len);
         const float angle = frand(0.0f, 6.2831853f);
-        const float spread = frand(0.0f, 8.0f);
+        const float spread = frand(0.0f, 15.0f);
         x = target.x + dx / len * back + std::cos(angle) * spread;
         y = target.y + dy / len * back + std::sin(angle) * spread;
         z = target.z + 2.0f;
@@ -463,19 +471,23 @@ namespace cmangos_module
     // ------------------------------------------------------------------ bots
     void RenownModule::RvRReinforce(const std::vector<Player*>& players)
     {
-        const uint32 perSide = GetConfig()->rvrBotsPerSide;
-        if (!perSide || m_rvrLockTeam)
+        // A fixed share of each faction's level 1-19 bots (picked by guid, so always the same bots) fights on the
+        // front. Whenever one of them is idle somewhere else it is sent back, a wave at a time.
+        const uint32 share = std::min<uint32>(GetConfig()->rvrBotShare, 100);
+        if (!share || m_rvrLockTeam)
         {
             return;
         }
 
+        const uint32 cap = GetConfig()->rvrBotsPerSide;     // 0 = no cap
+        const uint32 wave = std::max<uint32>(1, GetConfig()->rvrBotsPerWave);
         for (uint32 team : { (uint32)ALLIANCE, (uint32)HORDE })
         {
             uint32 present = 0;
             std::vector<Player*> candidates;
             for (Player* player : players)
             {
-                if (player->isRealPlayer() || player->GetTeam() != team)
+                if (player->isRealPlayer() || player->GetTeam() != team || player->GetLevel() > GetConfig()->rvrMaxLevel)
                 {
                     continue;
                 }
@@ -486,9 +498,14 @@ namespace cmangos_module
                     continue;
                 }
 
-                if (player->GetLevel() < 10 || player->GetLevel() > GetConfig()->rvrMaxLevel || !player->IsAlive() ||
-                    player->IsInCombat() || player->InBattleGround() || player->InBattleGroundQueue() || player->GetGroup() ||
-                    player->IsTaxiFlying() || player->IsBeingTeleported() || !player->GetMap() || player->GetMap()->Instanceable())
+                if (player->GetObjectGuid().GetCounter() % 100 >= share)
+                {
+                    continue;   // one of the bots that lives a normal life
+                }
+
+                if (!player->IsAlive() || player->IsInCombat() || player->InBattleGround() || player->InBattleGroundQueue() ||
+                    player->GetGroup() || player->IsTaxiFlying() || player->IsBeingTeleported() || !player->GetMap() ||
+                    player->GetMap()->Instanceable())
                 {
                     continue;
                 }
@@ -496,8 +513,12 @@ namespace cmangos_module
                 candidates.push_back(player);
             }
 
-            uint32 need = present < perSide ? perSide - present : 0;
-            need = std::min<uint32>(need, 3);   // a few at a time
+            uint32 need = wave;
+            if (cap)
+            {
+                need = std::min<uint32>(need, present < cap ? cap - present : 0);
+            }
+
             while (need-- > 0 && !candidates.empty())
             {
                 const size_t pick = urand(0, uint32(candidates.size() - 1));
@@ -509,6 +530,108 @@ namespace cmangos_module
                 bot->TeleportTo(RVR_MAP, x, y, z, frand(0.0f, 6.28f));
             }
         }
+    }
+
+    // ------------------------------------------------------------------ field mounts
+    uint32 RenownModule::FieldMountSpell(const Player* player)
+    {
+        switch (player->getRace())
+        {
+            case RACE_HUMAN:    return 458;     // Brown Horse
+            case RACE_ORC:      return 580;     // Timber Wolf
+            case RACE_DWARF:    return 6777;    // Gray Ram
+            case RACE_NIGHTELF: return 10789;   // Spotted Frostsaber
+            case RACE_UNDEAD:   return 8980;    // Skeletal Horse
+            case RACE_TAUREN:   return 18990;   // Brown Kodo
+            case RACE_GNOME:    return 10873;   // Red Mechanostrider
+            case RACE_TROLL:    return 10796;   // Turquoise Raptor
+            default:            return 458;
+        }
+    }
+
+    bool RenownModule::CastFieldMount(Player* player, bool instant)
+    {
+        const uint32 spellId = FieldMountSpell(player);
+        if (!sSpellTemplate.LookupEntry<SpellEntry>(spellId))
+        {
+            return false;
+        }
+
+        // Same mount spell, but +X% speed instead of the normal 60% (the speed effect is index 1)
+        const int32 speed = int32(GetConfig()->fieldMountSpeed) - 1;
+        return player->CastCustomSpell(player, spellId, nullptr, &speed, nullptr, instant ? TRIGGERED_OLD_TRIGGERED : TRIGGERED_NONE) == SPELL_CAST_OK;
+    }
+
+    void RenownModule::UpdateBotMounts(const std::vector<Player*>& players)
+    {
+        if (!GetConfig()->fieldMountBots)
+        {
+            return;
+        }
+
+        for (Player* player : players)
+        {
+            if (player->isRealPlayer() || player->GetLevel() > GetConfig()->fieldMountMaxLevel || player->GetMapId() != RVR_MAP)
+            {
+                continue;
+            }
+
+            if (player->GetZoneId() != 17 && !RvRIsMember(player->GetObjectGuid().GetCounter()))
+            {
+                continue;   // the Barrens only
+            }
+
+            if (!player->IsAlive() || player->IsInCombat() || player->IsMounted() || !player->IsMoving() || player->IsInWater() ||
+                player->InBattleGround() || player->IsTaxiFlying() || m_rvrChickens.count(player->GetObjectGuid().GetCounter()))
+            {
+                continue;
+            }
+
+            CastFieldMount(player, true);
+        }
+    }
+
+    bool RenownModule::HandleMountCommand(WorldSession* session, const std::string& args)
+    {
+        Player* player = session ? session->GetPlayer() : nullptr;
+        if (!player || !GetConfig()->enabled)
+        {
+            return false;
+        }
+
+        ChatHandler handler(player);
+        if (player->IsMounted())
+        {
+            player->RemoveSpellsCausingAura(SPELL_AURA_MOUNTED);
+            return true;
+        }
+
+        if (!GetConfig()->fieldMount)
+        {
+            handler.PSendSysMessage("Field mounts are disabled.");
+            return true;
+        }
+
+        if (player->GetLevel() > GetConfig()->fieldMountMaxLevel && !player->IsGameMaster())
+        {
+            handler.PSendSysMessage("|cffffd100[Renown]|r The field mount is for levels 1-%u. Visit a mount vendor for a real one!", GetConfig()->fieldMountMaxLevel);
+            return true;
+        }
+
+        if (m_rvrChickens.count(player->GetObjectGuid().GetCounter()))
+        {
+            handler.PSendSysMessage("|cffffd100[Renown]|r Chickens can't ride.");
+            return true;
+        }
+
+        if (player->IsInCombat() || !player->IsAlive() || player->IsTaxiFlying())
+        {
+            handler.PSendSysMessage("|cffffd100[Renown]|r You can't mount right now.");
+            return true;
+        }
+
+        CastFieldMount(player, false);   // normal cast: cast bar, outdoors only (errors come from the spell itself)
+        return true;
     }
 
     // ------------------------------------------------------------------ main loop
@@ -751,6 +874,13 @@ namespace cmangos_module
             }
 
             // Bots keep the front busy
+            m_rvrMountTimer += diff;
+            if (m_rvrMountTimer >= 5 * IN_MILLISECONDS)
+            {
+                m_rvrMountTimer = 0;
+                UpdateBotMounts(players);
+            }
+
             m_rvrBotTimer += diff;
             if (m_rvrBotTimer >= 30 * IN_MILLISECONDS)
             {

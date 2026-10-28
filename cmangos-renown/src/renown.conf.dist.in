@@ -74,7 +74,15 @@
 #    Renown.RvR.DefendPoints    Extra Renown for killing an enemy near an objective your side holds (default 10)
 #    Renown.RvR.SiegeHold       Seconds a side must hold all objectives before the siege opens (default 120)
 #    Renown.RvR.LockMinutes     How long the lake stays locked after a successful siege (default 20)
-#    Renown.RvR.BotsPerSide     Free level 10-19 bots kept fighting in the lake per side (default 8, 0 = off)
+#    Renown.RvR.BotShare        Percent of each faction's level 1-19 bots that fight on the front (default 80, 0 = off).
+#                               The same bots every time (picked by guid); idle ones are sent back in waves.
+#    Renown.RvR.BotsPerWave     Bots sent per faction every 30 seconds (default 15)
+#    Renown.RvR.BotsPerSide     Optional cap on front bots per faction (default 0 = no cap)
+#
+#    Renown.FieldMount.Enable   Levels 1-MaxLevel can summon their racial mount at Speed % (.renown mount, Mount button)
+#    Renown.FieldMount.Bots     Low-level bots traveling in the Barrens mount up automatically
+#    Renown.FieldMount.Speed    Default 30
+#    Renown.FieldMount.MaxLevel Default 39
 #
 #    Renown.Points.*
 #        Renown awarded per event
@@ -134,7 +142,14 @@ Renown.RvR.TickPoints = 5
 Renown.RvR.DefendPoints = 10
 Renown.RvR.SiegeHold = 120
 Renown.RvR.LockMinutes = 20
-Renown.RvR.BotsPerSide = 8
+Renown.RvR.BotShare = 80
+Renown.RvR.BotsPerWave = 15
+Renown.RvR.BotsPerSide = 0
+
+Renown.FieldMount.Enable = 1
+Renown.FieldMount.Bots = 1
+Renown.FieldMount.Speed = 30
+Renown.FieldMount.MaxLevel = 39
 
 Renown.Points.HonorableKill = 10
 Renown.Points.KillingBlow = 5

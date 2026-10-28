@@ -57,6 +57,13 @@ namespace cmangos_module
         uint32 rvrSiegeHold;
         uint32 rvrLockMinutes;
         uint32 rvrBotsPerSide;
+        uint32 rvrBotShare;
+        uint32 rvrBotsPerWave;
+
+        bool fieldMount;
+        bool fieldMountBots;
+        uint32 fieldMountSpeed;
+        uint32 fieldMountMaxLevel;
 
         uint32 pointsHonorableKill;
         uint32 pointsKillingBlow;

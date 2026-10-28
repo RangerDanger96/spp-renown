@@ -85,7 +85,7 @@ INSERT INTO conditions (condition_entry,type,value1,value2,value3,value4,flags,c
 SET @bgc9 := (SELECT condition_entry FROM conditions WHERE type=14 AND value1=0 AND value2=1024 AND value3=0 AND value4=0 AND flags=0 LIMIT 1);
 
 -- Gossip
-INSERT INTO npc_text (ID,text0_0,text0_1,lang0,prob0) VALUES (59000,'Ready to fight for your faction, $C?$B$BOnce your character is level 19, visit your class trainer for new spells. I can teach you any weapon skill for free and give you a battleground kit with blue gear and 15 gold for training.$B$BThe battlemasters beside me will send you to Warsong Gulch, Arathi Basin or Alterac Valley.','',0,1);
+INSERT INTO npc_text (ID,text0_0,text0_1,lang0,prob0) VALUES (59000,'Glory is earned on the battlefield, $C.$B$BEvery foe you defeat and every flag and banner you claim earns you Renown. Earn enough and the Quartermaster''s stores are yours to choose from.$B$BI can also train you in any weapon for free, and the battlemasters beside me will send you to Warsong Gulch, Arathi Basin or Alterac Valley. When you are ready for open war, the Barrens Front awaits.','',0,1);
 INSERT INTO gossip_menu (entry,text_id,script_id,condition_id) VALUES (59000,59000,0,0);
 INSERT INTO gossip_menu_option (menu_id,id,option_icon,option_text,option_broadcast_text,option_id,npc_option_npcflag,action_menu_id,action_poi_id,action_script_id,box_coded,box_money,box_text,box_broadcast_text,condition_id) VALUES
 (59000,0,3,'Train me in weapon skills.',0,5,16,0,0,0,0,0,'',0,0),

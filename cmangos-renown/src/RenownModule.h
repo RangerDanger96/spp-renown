@@ -100,6 +100,12 @@ namespace cmangos_module
         bool HandleGiveCommand(WorldSession* session, const std::string& args);
         bool HandleQueueCommand(WorldSession* session, const std::string& args);
         bool HandleRvRCommand(WorldSession* session, const std::string& args);
+        bool HandleMountCommand(WorldSession* session, const std::string& args);
+
+        // Field mount: the racial mount at reduced speed for low-level characters
+        static uint32 FieldMountSpell(const Player* player);
+        bool CastFieldMount(Player* player, bool instant);
+        void UpdateBotMounts(const std::vector<Player*>& players);
         bool HandleReloadCommand(WorldSession* session, const std::string& args);
 
         void LoadVendorCosts();
@@ -173,6 +179,7 @@ namespace cmangos_module
         uint32 m_rvrTickTimer = 0;
         uint32 m_rvrStatusTimer = 0;
         uint32 m_rvrBotTimer = 0;
+        uint32 m_rvrMountTimer = 0;
         uint32 m_rvrHoldTeam = 0;
         uint32 m_rvrHoldTime = 0;
         uint32 m_rvrSiegeTeam = 0;                       // attacking team during a siege

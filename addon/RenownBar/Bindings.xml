@@ -1,0 +1,11 @@
+<Bindings>
+	<Binding name="RENOWN_PANEL" header="RENOWN">
+		RenownPvP_Toggle()
+	</Binding>
+	<Binding name="RENOWN_MOUNT">
+		RenownPvP_Mount()
+	</Binding>
+	<Binding name="RENOWN_FRONT">
+		RenownPvP_Front()
+	</Binding>
+</Bindings>

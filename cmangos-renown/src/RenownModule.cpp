@@ -1323,6 +1323,7 @@ namespace cmangos_module
             { "give", std::bind(&RenownModule::HandleGiveCommand, this, std::placeholders::_1, std::placeholders::_2), SEC_GAMEMASTER },
             { "queue", std::bind(&RenownModule::HandleQueueCommand, this, std::placeholders::_1, std::placeholders::_2), SEC_PLAYER },
             { "rvr", std::bind(&RenownModule::HandleRvRCommand, this, std::placeholders::_1, std::placeholders::_2), SEC_PLAYER },
+            { "mount", std::bind(&RenownModule::HandleMountCommand, this, std::placeholders::_1, std::placeholders::_2), SEC_PLAYER },
             { "reload", std::bind(&RenownModule::HandleReloadCommand, this, std::placeholders::_1, std::placeholders::_2), SEC_ADMINISTRATOR }
         };
 

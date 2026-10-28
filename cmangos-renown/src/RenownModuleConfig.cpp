@@ -66,7 +66,13 @@ namespace cmangos_module
     , rvrDefendPoints(10)
     , rvrSiegeHold(120)
     , rvrLockMinutes(20)
-    , rvrBotsPerSide(8)
+    , rvrBotsPerSide(0)
+    , rvrBotShare(80)
+    , rvrBotsPerWave(15)
+    , fieldMount(true)
+    , fieldMountBots(true)
+    , fieldMountSpeed(30)
+    , fieldMountMaxLevel(39)
     , pointsHonorableKill(10)
     , pointsKillingBlow(5)
     , pointsWorldKill(10)
@@ -126,7 +132,14 @@ namespace cmangos_module
         rvrDefendPoints = config.GetIntDefault("Renown.RvR.DefendPoints", 10);
         rvrSiegeHold = config.GetIntDefault("Renown.RvR.SiegeHold", 120);
         rvrLockMinutes = config.GetIntDefault("Renown.RvR.LockMinutes", 20);
-        rvrBotsPerSide = config.GetIntDefault("Renown.RvR.BotsPerSide", 8);
+        rvrBotsPerSide = config.GetIntDefault("Renown.RvR.BotsPerSide", 0);
+        rvrBotShare = config.GetIntDefault("Renown.RvR.BotShare", 80);
+        rvrBotsPerWave = config.GetIntDefault("Renown.RvR.BotsPerWave", 15);
+
+        fieldMount = config.GetBoolDefault("Renown.FieldMount.Enable", true);
+        fieldMountBots = config.GetBoolDefault("Renown.FieldMount.Bots", true);
+        fieldMountSpeed = config.GetIntDefault("Renown.FieldMount.Speed", 30);
+        fieldMountMaxLevel = config.GetIntDefault("Renown.FieldMount.MaxLevel", 39);
 
         pointsHonorableKill = config.GetIntDefault("Renown.Points.HonorableKill", 10);
         pointsKillingBlow = config.GetIntDefault("Renown.Points.KillingBlow", 5);

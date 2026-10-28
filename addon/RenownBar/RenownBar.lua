@@ -97,6 +97,9 @@ bar:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
 local function Refresh()
     if not rank then return end
+    -- shared with the PvP panel (RenownPvP.lua)
+    RenownBar_State = { rank = rank, title = title, current = current, needed = needed, total = total, maxed = maxed, spendable = spendable, nextRank = nextRank }
+    if RenownPvP_Refresh then RenownPvP_Refresh() end
     if maxed then
         bar:SetMinMaxValues(0, 1)
         bar:SetValue(1)
