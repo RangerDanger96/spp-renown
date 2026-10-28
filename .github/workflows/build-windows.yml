@@ -8,6 +8,7 @@ on:
     branches: [ main ]
     paths:
       - 'cmangos-renown/**'
+      - 'patches/**'
       - '.github/workflows/**'
 
 env:
@@ -30,6 +31,9 @@ jobs:
     permissions:
       contents: write   # publishes the finished build as a GitHub Release
     steps:
+      - name: Keep LF line endings (so the server patches apply cleanly)
+        run: git config --global core.autocrlf false
+
       - name: Checkout this repository (Renown module)
         uses: actions/checkout@v4
         with:
@@ -65,6 +69,13 @@ jobs:
       - { name: barber, uses: actions/checkout@v4, with: { repository: celguar/cmangos-barber, ref: 5f214bebabfd147a150133986756b57540d5de0e, path: deps/barber } }
       - { name: trainingdummies, uses: actions/checkout@v4, with: { repository: flekz-games/cmangos-trainingdummies, ref: d00323521680b76eebbe03d9c498c84ec85e7bbf, path: deps/trainingdummies } }
       - { name: balancing, uses: actions/checkout@v4, with: { repository: flekz-games/cmangos-balancing, ref: ca556e406bdfd97cfcbcad4f171573d2d44776f7, path: deps/balancing } }
+
+      - name: Apply server patches (7 battleground brackets, level 1 battlegrounds for bots)
+        shell: bash
+        run: |
+          git -C core apply --whitespace=nowarn "$GITHUB_WORKSPACE/renown-repo/patches/core.patch"
+          git -C core/src/modules/PlayerBots apply --whitespace=nowarn "$GITHUB_WORKSPACE/renown-repo/patches/playerbots.patch"
+          grep -n "MAX_BATTLEGROUND_BRACKETS  7" core/src/game/BattleGround/BattleGround.h
 
       - name: Register the Renown module
         shell: bash

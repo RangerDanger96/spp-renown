@@ -30,6 +30,12 @@
 #        Server-wide announcement every N ranks (real players only). 0 = never
 #        Default: 5
 #
+#    Renown.Bolster
+#        Inside a battleground, raise players below the top level of their bracket to that level's base
+#        stats, health and mana (1-9 -> 9, 10-19 -> 19, ... 50-59 -> 59, Alterac Valley -> 60).
+#        Spells and talents are not changed. Removed when leaving the battleground.
+#        Default: 1
+#
 #    Renown.Points.*
 #        Renown awarded per event
 #
@@ -56,6 +62,7 @@ Renown.RankBase = 100
 Renown.RankExponent = 1.5
 Renown.Rate = 1.0
 Renown.AnnounceEvery = 5
+Renown.Bolster = 1
 
 Renown.Points.HonorableKill = 10
 Renown.Points.KillingBlow = 5

@@ -1,6 +1,7 @@
 #include "RenownModule.h"
 
 #include "BattleGround/BattleGround.h"
+#include "BattleGround/BattleGroundMgr.h"
 #include "Chat/Chat.h"
 #include "Database/DatabaseEnv.h"
 #include "Entities/Creature.h"
@@ -116,6 +117,11 @@ namespace cmangos_module
         // Make sure the latest value is written before the cache entry goes away
         OnSaveToDB(player);
 
+        {
+            std::lock_guard<std::mutex> bolsterLock(m_bolsterMutex);
+            m_bolster.erase(player->GetObjectGuid().GetCounter());
+        }
+
         std::lock_guard<std::mutex> lock(m_dataMutex);
         m_data.erase(player->GetObjectGuid().GetCounter());
     }
@@ -212,6 +218,137 @@ namespace cmangos_module
 
             const bool won = winnerTeam != TEAM_NONE && (uint32)entry.second.playerTeam == winnerTeam;
             AddRenown(player, won ? GetConfig()->pointsWin : GetConfig()->pointsLoss);
+        }
+    }
+
+    uint32 RenownModule::CalculateBolsterLevel(BattleGround* battleground, Player* player) const
+    {
+        if (!battleground || !player || !GetConfig()->enabled || !GetConfig()->bolsterEnabled)
+        {
+            return 0;
+        }
+
+        const BattleGroundBracketId bracketId = battleground->GetBracketId();
+        if (bracketId == BG_BRACKET_ID_TEMPLATE)
+        {
+            return 0;
+        }
+
+        uint32 target = sBattleGroundMgr.GetMaxLevelForBattleGroundBracketId(bracketId, battleground->GetTypeId());
+        target = std::min(target, sWorld.getConfig(CONFIG_UINT32_MAX_PLAYER_LEVEL));
+        return target > player->GetLevel() ? target : 0;
+    }
+
+    uint32 RenownModule::GetBolsterLevel(const Player* player) const
+    {
+        if (!player)
+        {
+            return 0;
+        }
+
+        std::lock_guard<std::mutex> lock(m_bolsterMutex);
+        auto itr = m_bolster.find(player->GetObjectGuid().GetCounter());
+        return itr != m_bolster.end() ? itr->second : 0;
+    }
+
+    void RenownModule::ApplyLevelStats(Player* player, uint32 level)
+    {
+        if (!player || !player->IsInWorld())
+        {
+            return;
+        }
+
+        PlayerLevelInfo info;
+        sObjectMgr.GetPlayerLevelInfo(player->getRace(), player->getClass(), level, &info);
+
+        PlayerClassLevelInfo classInfo;
+        sObjectMgr.GetPlayerClassLevelInfo(player->getClass(), level, &classInfo);
+
+        const bool alive = player->IsAlive();
+        const float healthPct = player->GetMaxHealth() ? player->GetHealthPercent() : 100.0f;
+        const float manaPct = player->GetPowerPercent(POWER_MANA);
+
+        player->_RemoveAllStatBonuses();
+
+        for (int i = STAT_STRENGTH; i < MAX_STATS; ++i)
+        {
+            player->SetCreateStat(Stats(i), info.stats[i]);
+            player->SetStat(Stats(i), info.stats[i]);
+        }
+
+        player->SetCreateHealth(classInfo.basehealth);
+        player->SetCreateMana(classInfo.basemana);
+
+        player->_ApplyAllStatBonuses();
+
+        if (alive)
+        {
+            const uint32 health = std::max<uint32>(1, uint32(player->GetMaxHealth() * healthPct / 100.0f));
+            player->SetHealth(health);
+
+            if (player->GetMaxPower(POWER_MANA) > 0)
+            {
+                player->SetPower(POWER_MANA, uint32(player->GetMaxPower(POWER_MANA) * manaPct / 100.0f));
+            }
+        }
+    }
+
+    void RenownModule::OnJoinBattleGround(BattleGround* battleground, Player* player)
+    {
+        const uint32 target = CalculateBolsterLevel(battleground, player);
+        if (!target)
+        {
+            return;
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(m_bolsterMutex);
+            m_bolster[player->GetObjectGuid().GetCounter()] = target;
+        }
+
+        ApplyLevelStats(player, target);
+
+        if (player->isRealPlayer())
+        {
+            ChatHandler(player).PSendSysMessage("|cff00ccffBolster:|r your base stats are raised to level %u for this battleground.", target);
+        }
+    }
+
+    void RenownModule::OnLeaveBattleGround(BattleGround* battleground, Player* player)
+    {
+        if (!player)
+        {
+            return;
+        }
+
+        bool wasBolstered = false;
+        {
+            std::lock_guard<std::mutex> lock(m_bolsterMutex);
+            wasBolstered = m_bolster.erase(player->GetObjectGuid().GetCounter()) > 0;
+        }
+
+        if (wasBolstered)
+        {
+            ApplyLevelStats(player, player->GetLevel());
+        }
+    }
+
+    void RenownModule::OnGetPlayerLevelInfo(Player* player, PlayerLevelInfo& info)
+    {
+        // Keeps the bolster if the core rebuilds stats while inside the battleground (e.g. .reset stats)
+        const uint32 target = GetBolsterLevel(player);
+        if (target && player->InBattleGround())
+        {
+            sObjectMgr.GetPlayerLevelInfo(player->getRace(), player->getClass(), target, &info);
+        }
+    }
+
+    void RenownModule::OnGetPlayerClassLevelInfo(Player* player, PlayerClassLevelInfo& info)
+    {
+        const uint32 target = GetBolsterLevel(player);
+        if (target && player->InBattleGround())
+        {
+            sObjectMgr.GetPlayerClassLevelInfo(player->getClass(), target, &info);
         }
     }
 

@@ -27,10 +27,14 @@ namespace cmangos_module
         void OnDeleteFromDB(uint32 playerId) override;
         void OnLogOut(Player* player) override;
         void OnRewardHonor(Player* player, Unit* victim) override;
+        void OnGetPlayerLevelInfo(Player* player, PlayerLevelInfo& info) override;
+        void OnGetPlayerClassLevelInfo(Player* player, PlayerClassLevelInfo& info) override;
 
         // Battleground hooks
         void OnUpdatePlayerScore(BattleGround* battleground, Player* player, uint8 scoreType, uint32 value) override;
         void OnEndBattleGround(BattleGround* battleground, uint32 winnerTeam) override;
+        void OnJoinBattleGround(BattleGround* battleground, Player* player) override;
+        void OnLeaveBattleGround(BattleGround* battleground, Player* player) override;
 
         // Gossip hooks
         bool OnPreGossipHello(Player* player, Creature* creature) override;
@@ -60,6 +64,13 @@ namespace cmangos_module
         void SendAddonUpdate(Player* player) const;
 
         bool CanEarnRenown(const Player* player) const;
+
+        // Bolster: inside a battleground, players below their bracket's top level get that level's
+        // base stats, health and mana. Returns 0 when the player should not be bolstered.
+        uint32 GetBolsterLevel(const Player* player) const;
+        uint32 CalculateBolsterLevel(BattleGround* battleground, Player* player) const;
+        // Rebuilds the player's base stats for the given level, keeping health/mana percentages
+        void ApplyLevelStats(Player* player, uint32 level);
         static std::string GetRankTitle(uint32 rank);
         RenownData GetData(uint32 playerId);
 
@@ -73,6 +84,9 @@ namespace cmangos_module
     private:
         std::unordered_map<uint32, RenownData> m_data;
         mutable std::mutex m_dataMutex;
+
+        std::unordered_map<uint32, uint32> m_bolster;   // player guid -> bolstered level
+        mutable std::mutex m_bolsterMutex;
     };
 }
 

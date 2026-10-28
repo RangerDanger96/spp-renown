@@ -311,6 +311,16 @@ UPDATE battleground_template SET MinPlayersPerTeam=2 WHERE id=2; -- Warsong Gulc
 UPDATE battleground_template SET MinPlayersPerTeam=3 WHERE id=3; -- Arathi Basin (default 8)
 UPDATE battleground_template SET MinPlayersPerTeam=5 WHERE id=1; -- Alterac Valley (default 20)
 
+-- Battlegrounds open at level 1 (needs the patched mangosd with the 1-9 bracket)
+UPDATE battleground_template SET MinLvl=1 WHERE id IN (2,3); -- Warsong Gulch (default 10), Arathi Basin (default 20)
+-- Battlemasters: drop the level 10/20 requirement on the 'go to the battleground' option and greeting
+DROP TEMPORARY TABLE IF EXISTS tmp_bm;
+CREATE TEMPORARY TABLE tmp_bm SELECT DISTINCT menu_id FROM gossip_menu_option WHERE option_id=12 AND condition_id IN (107,1011);
+UPDATE gossip_menu_option SET condition_id=0 WHERE option_id=12 AND condition_id IN (107,1011);
+DELETE g0 FROM gossip_menu g0 JOIN gossip_menu g1 ON g1.entry=g0.entry AND g1.condition_id IN (107,1011) WHERE g0.condition_id=0 AND g0.entry IN (SELECT menu_id FROM tmp_bm);
+UPDATE gossip_menu SET condition_id=0 WHERE condition_id IN (107,1011) AND entry IN (SELECT menu_id FROM tmp_bm);
+DROP TEMPORARY TABLE IF EXISTS tmp_bm;
+
 -- Spawns
 INSERT INTO creature (id,map,spawnMask,position_x,position_y,position_z,orientation,spawntimesecsmin,spawntimesecsmax,spawndist,MovementType) VALUES
 (190100,0,1,-8943.882,-136.901,83.783,2.5133,25,25,0,0), -- Northshire Valley quartermaster

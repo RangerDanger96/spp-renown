@@ -27,6 +27,7 @@ namespace cmangos_module
         float rankExponent;
         float rate;
         uint32 announceEvery;
+        bool bolsterEnabled;
 
         uint32 pointsHonorableKill;
         uint32 pointsKillingBlow;

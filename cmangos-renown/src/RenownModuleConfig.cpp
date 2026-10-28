@@ -41,6 +41,7 @@ namespace cmangos_module
     , rankExponent(1.5f)
     , rate(1.0f)
     , announceEvery(5)
+    , bolsterEnabled(true)
     , pointsHonorableKill(10)
     , pointsKillingBlow(5)
     , pointsWorldKill(10)
@@ -71,6 +72,7 @@ namespace cmangos_module
         rankExponent = config.GetFloatDefault("Renown.RankExponent", 1.5f);
         rate = config.GetFloatDefault("Renown.Rate", 1.0f);
         announceEvery = config.GetIntDefault("Renown.AnnounceEvery", 5);
+        bolsterEnabled = config.GetBoolDefault("Renown.Bolster", true);
 
         pointsHonorableKill = config.GetIntDefault("Renown.Points.HonorableKill", 10);
         pointsKillingBlow = config.GetIntDefault("Renown.Points.KillingBlow", 5);
