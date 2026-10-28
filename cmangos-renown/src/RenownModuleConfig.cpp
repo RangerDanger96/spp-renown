@@ -42,6 +42,21 @@ namespace cmangos_module
     , rate(1.0f)
     , announceEvery(5)
     , bolsterEnabled(true)
+    , lootBags(true)
+    , lootBagPointsGold(100)
+    , lootBagPointsPurple(60)
+    , lootBagPointsBlue(30)
+    , lootBagItemChanceGold(100)
+    , lootBagItemChancePurple(50)
+    , lootBagItemChanceBlue(25)
+    , streaks(true)
+    , streakBonusPerKill(2)
+    , streakBonusMax(30)
+    , bountyMinStreak(5)
+    , bountyPerKill(10)
+    , bountyMax(250)
+    , pointsHealAssist(5)
+    , assistWindow(15)
     , pointsHonorableKill(10)
     , pointsKillingBlow(5)
     , pointsWorldKill(10)
@@ -73,6 +88,24 @@ namespace cmangos_module
         rate = config.GetFloatDefault("Renown.Rate", 1.0f);
         announceEvery = config.GetIntDefault("Renown.AnnounceEvery", 5);
         bolsterEnabled = config.GetBoolDefault("Renown.Bolster", true);
+
+        lootBags = config.GetBoolDefault("Renown.LootBags", true);
+        lootBagPointsGold = config.GetIntDefault("Renown.LootBags.GoldPoints", 100);
+        lootBagPointsPurple = config.GetIntDefault("Renown.LootBags.PurplePoints", 60);
+        lootBagPointsBlue = config.GetIntDefault("Renown.LootBags.BluePoints", 30);
+        lootBagItemChanceGold = config.GetIntDefault("Renown.LootBags.GoldItemChance", 100);
+        lootBagItemChancePurple = config.GetIntDefault("Renown.LootBags.PurpleItemChance", 50);
+        lootBagItemChanceBlue = config.GetIntDefault("Renown.LootBags.BlueItemChance", 25);
+
+        streaks = config.GetBoolDefault("Renown.Streaks", true);
+        streakBonusPerKill = config.GetIntDefault("Renown.Streaks.BonusPerKill", 2);
+        streakBonusMax = config.GetIntDefault("Renown.Streaks.BonusMax", 30);
+        bountyMinStreak = config.GetIntDefault("Renown.Bounty.MinStreak", 5);
+        bountyPerKill = config.GetIntDefault("Renown.Bounty.PerKill", 10);
+        bountyMax = config.GetIntDefault("Renown.Bounty.Max", 250);
+
+        pointsHealAssist = config.GetIntDefault("Renown.Points.HealAssist", 5);
+        assistWindow = config.GetIntDefault("Renown.AssistWindow", 15);
 
         pointsHonorableKill = config.GetIntDefault("Renown.Points.HonorableKill", 10);
         pointsKillingBlow = config.GetIntDefault("Renown.Points.KillingBlow", 5);

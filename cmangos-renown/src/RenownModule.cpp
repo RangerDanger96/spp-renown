@@ -9,6 +9,8 @@
 #include "Entities/Player.h"
 #include "Globals/ObjectMgr.h"
 #include "Log/Log.h"
+#include "Maps/Map.h"
+#include "Mails/Mail.h"
 #include "Server/WorldSession.h"
 #include "Tools/Formulas.h"
 #include "World/World.h"
@@ -140,6 +142,12 @@ namespace cmangos_module
             m_bolster.erase(player->GetObjectGuid().GetCounter());
         }
 
+        {
+            std::lock_guard<std::mutex> combatLock(m_combatMutex);
+            m_attackers.erase(player->GetObjectGuid().GetCounter());
+            m_healers.erase(player->GetObjectGuid().GetCounter());
+        }
+
         std::lock_guard<std::mutex> lock(m_dataMutex);
         m_data.erase(player->GetObjectGuid().GetCounter());
     }
@@ -225,6 +233,9 @@ namespace cmangos_module
         {
             return;
         }
+
+        // Rank by what was earned during the match, before the win/loss renown is added
+        AwardLootBags(battleground, winnerTeam);
 
         for (const auto& entry : battleground->GetPlayers())
         {
@@ -313,6 +324,12 @@ namespace cmangos_module
 
     void RenownModule::OnJoinBattleGround(BattleGround* battleground, Player* player)
     {
+        if (player)
+        {
+            std::lock_guard<std::mutex> lock(m_dataMutex);
+            m_data[player->GetObjectGuid().GetCounter()].bgEarned = 0;
+        }
+
         const uint32 target = CalculateBolsterLevel(battleground, player);
         if (!target)
         {
@@ -373,7 +390,9 @@ namespace cmangos_module
     void RenownModule::LoadVendorCosts()
     {
         std::unordered_map<uint32, uint32> costs;
-        auto result = WorldDatabase.Query("SELECT `item`, `cost` FROM `custom_renown_vendor`");
+        std::unordered_map<uint32, uint32> tiers;
+        auto hasTier = WorldDatabase.Query("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'custom_renown_vendor' AND COLUMN_NAME = 'tier'");
+        auto result = WorldDatabase.Query(hasTier ? "SELECT `item`, `cost`, `tier` FROM `custom_renown_vendor`" : "SELECT `item`, `cost`, 0 FROM `custom_renown_vendor`");
         if (result)
         {
             do
@@ -382,6 +401,7 @@ namespace cmangos_module
                 if (fields[1].GetUInt32() > 0)
                 {
                     costs[fields[0].GetUInt32()] = fields[1].GetUInt32();
+                    tiers[fields[0].GetUInt32()] = fields[2].GetUInt32();
                 }
             }
             while (result->NextRow());
@@ -393,6 +413,7 @@ namespace cmangos_module
 
         std::lock_guard<std::mutex> lock(m_vendorMutex);
         m_vendorCosts.swap(costs);
+        m_vendorTiers.swap(tiers);
     }
 
     uint32 RenownModule::GetRenownCost(uint32 itemId) const
@@ -547,6 +568,459 @@ namespace cmangos_module
         return true;
     }
 
+    // ------------------------------------------------------------------ loot bags
+    uint32 RenownModule::GetRenownTier(Player* player) const
+    {
+        const RenownData data = const_cast<RenownModule*>(this)->GetData(player->GetObjectGuid().GetCounter());
+        const std::vector<uint32>& ranks = GetConfig()->insigniaRanks;
+        uint32 tier = 0;
+        for (size_t i = 0; i < ranks.size(); ++i)
+        {
+            if (data.rank >= ranks[i])
+            {
+                tier = (uint32)i + 1;
+            }
+        }
+
+        return tier;
+    }
+
+    static uint32 RenownBracketForLevel(uint32 level)
+    {
+        if (level < 10)
+        {
+            return 0;
+        }
+
+        return std::min<uint32>(level / 10, 6);
+    }
+
+    uint32 RenownModule::PickRewardItem(Player* player) const
+    {
+        std::vector<std::pair<uint32, uint32>> items;   // item, tier
+        {
+            std::lock_guard<std::mutex> lock(m_vendorMutex);
+            for (const auto& entry : m_vendorTiers)
+            {
+                items.emplace_back(entry.first, entry.second);
+            }
+        }
+
+        const uint32 unlocked = GetRenownTier(player);
+        const uint32 playerBracket = RenownBracketForLevel(player->GetLevel());
+
+        // Best armor type the player can wear: plate > mail > leather > cloth
+        uint32 armorType = ITEM_SUBCLASS_ARMOR_CLOTH;
+        if (player->HasSkill(SKILL_PLATE_MAIL))
+        {
+            armorType = ITEM_SUBCLASS_ARMOR_PLATE;
+        }
+        else if (player->HasSkill(SKILL_MAIL))
+        {
+            armorType = ITEM_SUBCLASS_ARMOR_MAIL;
+        }
+        else if (player->HasSkill(SKILL_LEATHER))
+        {
+            armorType = ITEM_SUBCLASS_ARMOR_LEATHER;
+        }
+
+        const uint32 playerClass = player->getClass();
+        const bool physical = playerClass == CLASS_WARRIOR || playerClass == CLASS_ROGUE || playerClass == CLASS_HUNTER;
+        const bool caster = playerClass == CLASS_MAGE || playerClass == CLASS_PRIEST || playerClass == CLASS_WARLOCK;
+
+        // Look in the player's own level bracket first, then fall back one bracket at a time
+        for (int bracket = (int)playerBracket; bracket >= 0; --bracket)
+        {
+            std::vector<uint32> candidates;
+            for (const auto& entry : items)
+            {
+                if (entry.second > unlocked)
+                {
+                    continue;
+                }
+
+                ItemPrototype const* proto = ObjectMgr::GetItemPrototype(entry.first);
+                if (!proto || (proto->Class != ITEM_CLASS_WEAPON && proto->Class != ITEM_CLASS_ARMOR))
+                {
+                    continue;
+                }
+
+                if ((int)RenownBracketForLevel(std::max<uint32>(proto->RequiredLevel, 1)) != bracket)
+                {
+                    continue;
+                }
+
+                if (player->CanUseItem(proto, false) != EQUIP_ERR_OK)
+                {
+                    continue;
+                }
+
+                if (proto->Class == ITEM_CLASS_ARMOR && proto->SubClass >= ITEM_SUBCLASS_ARMOR_CLOTH &&
+                    proto->SubClass <= ITEM_SUBCLASS_ARMOR_PLATE && proto->SubClass != armorType &&
+                    proto->InventoryType != INVTYPE_CLOAK)
+                {
+                    continue;
+                }
+
+                bool hasPhysical = false;
+                bool hasCaster = false;
+                for (uint32 i = 0; i < MAX_ITEM_PROTO_STATS; ++i)
+                {
+                    if (!proto->ItemStat[i].ItemStatValue)
+                    {
+                        continue;
+                    }
+
+                    switch (proto->ItemStat[i].ItemStatType)
+                    {
+                        case ITEM_MOD_STRENGTH:
+                        case ITEM_MOD_AGILITY:   hasPhysical = true; break;
+                        case ITEM_MOD_INTELLECT:
+                        case ITEM_MOD_SPIRIT:    hasCaster = true; break;
+                        default: break;
+                    }
+                }
+
+                if ((physical && hasCaster && !hasPhysical) || (caster && hasPhysical && !hasCaster))
+                {
+                    continue;
+                }
+
+                candidates.push_back(entry.first);
+            }
+
+            if (!candidates.empty())
+            {
+                return candidates[urand(0, (uint32)candidates.size() - 1)];
+            }
+        }
+
+        return 0;
+    }
+
+    void RenownModule::GiveItem(Player* player, uint32 itemId, const std::string& subject)
+    {
+        if (player->StoreNewItemInBestSlots(itemId, 1))
+        {
+            return;
+        }
+
+        // Bags full: send it by mail
+        if (Item* item = Item::CreateItem(itemId, 1, player))
+        {
+            CharacterDatabase.BeginTransaction();
+            item->SaveToDB();
+            CharacterDatabase.CommitTransaction();
+            MailDraft(subject, "Your bags were full, so your loot bag reward was sent by mail.").AddItem(item).SendMailTo(player, MailSender(player, MAIL_STATIONERY_GM), MAIL_CHECK_MASK_COPIED);
+            ChatHandler(player).PSendSysMessage("|cffffd100[Renown]|r Your bags are full, the item was sent to your mailbox.");
+        }
+    }
+
+    void RenownModule::GiveLootBag(Player* player, BagType bag)
+    {
+        const RenownModuleConfig* config = GetConfig();
+        static const char* names[] = { "|cffff8000Gold Loot Bag|r", "|cffa335eePurple Loot Bag|r", "|cff0070ddBlue Loot Bag|r" };
+        const uint32 points[] = { config->lootBagPointsGold, config->lootBagPointsPurple, config->lootBagPointsBlue };
+        const uint32 chances[] = { config->lootBagItemChanceGold, config->lootBagItemChancePurple, config->lootBagItemChanceBlue };
+
+        std::ostringstream message;
+        message << "|cffffd100[Renown]|r You won a " << names[bag] << "!";
+
+        uint32 itemId = 0;
+        if (urand(1, 100) <= chances[bag])
+        {
+            itemId = PickRewardItem(player);
+        }
+
+        uint32 renown = points[bag];
+        if (itemId)
+        {
+            ItemPrototype const* proto = ObjectMgr::GetItemPrototype(itemId);
+            message << " It holds |cffffffff[" << (proto ? proto->Name1 : "item") << "]|r";
+            GiveItem(player, itemId, "Loot bag reward");
+            message << " and " << renown << " Renown.";
+        }
+        else
+        {
+            if (urand(1, 100) <= chances[bag])
+            {
+                renown += renown / 2;   // no fitting gear unlocked yet: extra Renown instead
+            }
+
+            message << " It holds " << renown << " Renown.";
+        }
+
+        ChatHandler(player).PSendSysMessage("%s", message.str().c_str());
+        AddRenown(player, renown, false);
+    }
+
+    void RenownModule::AwardLootBags(BattleGround* battleground, uint32 winnerTeam)
+    {
+        if (!GetConfig()->lootBags)
+        {
+            return;
+        }
+
+        struct Entry { Player* player; uint32 score; bool won; };
+        std::vector<Entry> winners;
+        std::vector<Entry> losers;
+        for (const auto& entry : battleground->GetPlayers())
+        {
+            Player* player = sObjectMgr.GetPlayer(entry.first);
+            if (!player)
+            {
+                continue;
+            }
+
+            const RenownData data = GetData(player->GetObjectGuid().GetCounter());
+            if (data.bgEarned == 0)
+            {
+                continue;   // no contribution, no bag
+            }
+
+            // Contribution with a small random factor, like the Warhammer roll
+            const uint32 score = data.bgEarned * urand(80, 120);
+            const bool won = winnerTeam != TEAM_NONE && (uint32)entry.second.playerTeam == winnerTeam;
+            (won ? winners : losers).push_back({ player, score, won });
+        }
+
+        auto byScore = [](const Entry& a, const Entry& b) { return a.score > b.score; };
+        std::sort(winners.begin(), winners.end(), byScore);
+        std::sort(losers.begin(), losers.end(), byScore);
+
+        std::ostringstream summary;
+        summary << "|cffffd100[Renown] Loot bags:|r";
+        bool any = false;
+
+        auto give = [&](const Entry& entry, BagType bag)
+        {
+            static const char* colors[] = { "|cffff8000Gold|r", "|cffa335eePurple|r", "|cff0070ddBlue|r" };
+            summary << " " << entry.player->GetName() << " (" << colors[bag] << ")";
+            any = true;
+            if (entry.player->isRealPlayer())
+            {
+                GiveLootBag(entry.player, bag);
+            }
+        };
+
+        for (size_t i = 0; i < winners.size() && i < 6; ++i)
+        {
+            give(winners[i], i == 0 ? BAG_GOLD : (i < 3 ? BAG_PURPLE : BAG_BLUE));
+        }
+
+        for (size_t i = 0; i < losers.size() && i < 3; ++i)
+        {
+            give(losers[i], i == 0 ? BAG_PURPLE : BAG_BLUE);
+        }
+
+        if (any)
+        {
+            for (const auto& entry : battleground->GetPlayers())
+            {
+                Player* player = sObjectMgr.GetPlayer(entry.first);
+                if (player && player->isRealPlayer())
+                {
+                    ChatHandler(player).PSendSysMessage("%s", summary.str().c_str());
+                }
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ streaks, bounties, assists
+    void RenownModule::Announce(Player* source, const std::string& text) const
+    {
+        if (!source || !source->IsInWorld())
+        {
+            return;
+        }
+
+        const uint32 zone = source->GetZoneId();
+        for (const auto& ref : source->GetMap()->GetPlayers())
+        {
+            Player* player = ref.getSource();
+            if (player && player->isRealPlayer() && player->GetZoneId() == zone)
+            {
+                ChatHandler(player).PSendSysMessage("%s", text.c_str());
+            }
+        }
+    }
+
+    void RenownModule::RecordRecent(std::unordered_map<uint32, std::vector<std::pair<uint32, time_t>>>& map, uint32 key, uint32 who, time_t now)
+    {
+        std::vector<std::pair<uint32, time_t>>& list = map[key];
+        const time_t window = (time_t)GetConfig()->assistWindow;
+        list.erase(std::remove_if(list.begin(), list.end(), [&](const std::pair<uint32, time_t>& e) { return now - e.second > window || e.first == who; }), list.end());
+        if (list.size() < 40)
+        {
+            list.emplace_back(who, now);
+        }
+    }
+
+    void RenownModule::OnDealDamage(Unit* unit, Unit* victim, uint32 health, uint32 damage)
+    {
+        if (!unit || !victim || damage == 0 || victim->GetTypeId() != TYPEID_PLAYER || !GetConfig()->enabled)
+        {
+            return;
+        }
+
+        Player* attacker = unit->GetBeneficiaryPlayer();
+        if (!attacker || attacker == victim || attacker->GetTeam() == ((Player*)victim)->GetTeam())
+        {
+            return;
+        }
+
+        std::lock_guard<std::mutex> lock(m_combatMutex);
+        RecordRecent(m_attackers, victim->GetObjectGuid().GetCounter(), attacker->GetObjectGuid().GetCounter(), time(nullptr));
+    }
+
+    void RenownModule::OnDealHeal(Unit* unit, Unit* victim, int32 gain, uint32 addHealth)
+    {
+        if (!unit || !victim || gain <= 0 || unit == victim || victim->GetTypeId() != TYPEID_PLAYER || !GetConfig()->enabled)
+        {
+            return;
+        }
+
+        Player* healer = unit->GetBeneficiaryPlayer();
+        if (!healer || healer == victim || healer->GetTeam() != ((Player*)victim)->GetTeam() || !victim->IsInCombat())
+        {
+            return;
+        }
+
+        std::lock_guard<std::mutex> lock(m_combatMutex);
+        RecordRecent(m_healers, victim->GetObjectGuid().GetCounter(), healer->GetObjectGuid().GetCounter(), time(nullptr));
+    }
+
+    void RenownModule::OnDeath(Player* victim, Unit* killer)
+    {
+        if (!victim || !killer || !GetConfig()->enabled)
+        {
+            return;
+        }
+
+        Player* player = killer->GetBeneficiaryPlayer();
+        const uint32 victimId = victim->GetObjectGuid().GetCounter();
+
+        // Any death ends the victim's streak
+        uint32 oldStreak = 0;
+        {
+            std::lock_guard<std::mutex> lock(m_dataMutex);
+            auto itr = m_data.find(victimId);
+            if (itr != m_data.end())
+            {
+                oldStreak = itr->second.streak;
+                itr->second.streak = 0;
+            }
+        }
+
+        if (!player || player == victim || player->GetTeam() == victim->GetTeam() ||
+            MaNGOS::XP::IsTrivialLevelDifference(player->GetLevel(), victim->GetLevel()))
+        {
+            std::lock_guard<std::mutex> lock(m_combatMutex);
+            m_attackers.erase(victimId);
+            return;
+        }
+
+        const RenownModuleConfig* config = GetConfig();
+        if (config->streaks)
+        {
+            // Bounty for ending a streak
+            if (oldStreak >= config->bountyMinStreak && config->bountyPerKill)
+            {
+                const uint32 bounty = std::min(config->bountyPerKill * oldStreak, config->bountyMax);
+                std::ostringstream text;
+                text << "|cffff4040[Bounty]|r " << player->GetName() << " ended " << victim->GetName() << "'s killing spree of "
+                     << oldStreak << " and claims " << bounty << " Renown!";
+                Announce(player, text.str());
+                AddRenown(player, bounty);
+            }
+
+            uint32 streak = 0;
+            {
+                std::lock_guard<std::mutex> lock(m_dataMutex);
+                streak = ++m_data[player->GetObjectGuid().GetCounter()].streak;
+            }
+
+            if (streak >= 3)
+            {
+                AddRenown(player, std::min(config->streakBonusPerKill * streak, config->streakBonusMax));
+
+                const char* label = nullptr;
+                switch (streak)
+                {
+                    case 3:  label = "is on a killing spree"; break;
+                    case 5:  label = "is on a rampage"; break;
+                    case 10: label = "is unstoppable"; break;
+                    case 15: label = "is godlike"; break;
+                    default: if (streak >= 20 && streak % 5 == 0) label = "is legendary"; break;
+                }
+
+                if (label)
+                {
+                    std::ostringstream text;
+                    text << "|cffff8000[Streak]|r " << player->GetName() << " " << label << " (" << streak << " kills)!";
+                    if (streak >= config->bountyMinStreak)
+                    {
+                        text << " Bounty: " << std::min(config->bountyPerKill * streak, config->bountyMax) << " Renown.";
+                    }
+
+                    Announce(player, text.str());
+                }
+            }
+        }
+
+        // Healing assists: healers who kept any of the attackers alive
+        if (config->pointsHealAssist)
+        {
+            std::vector<uint32> healers;
+            {
+                std::lock_guard<std::mutex> lock(m_combatMutex);
+                const time_t now = time(nullptr);
+                std::vector<uint32> attackers = { player->GetObjectGuid().GetCounter() };
+                auto itr = m_attackers.find(victimId);
+                if (itr != m_attackers.end())
+                {
+                    for (const auto& e : itr->second)
+                    {
+                        if (now - e.second <= (time_t)config->assistWindow && e.first != attackers[0])
+                        {
+                            attackers.push_back(e.first);
+                        }
+                    }
+
+                    m_attackers.erase(itr);
+                }
+
+                for (uint32 attacker : attackers)
+                {
+                    auto h = m_healers.find(attacker);
+                    if (h == m_healers.end())
+                    {
+                        continue;
+                    }
+
+                    for (const auto& e : h->second)
+                    {
+                        if (now - e.second <= (time_t)config->assistWindow &&
+                            std::find(attackers.begin(), attackers.end(), e.first) == attackers.end() &&
+                            std::find(healers.begin(), healers.end(), e.first) == healers.end())
+                        {
+                            healers.push_back(e.first);
+                        }
+                    }
+                }
+            }
+
+            for (uint32 healerId : healers)
+            {
+                Player* healer = sObjectMgr.GetPlayer(ObjectGuid(HIGHGUID_PLAYER, healerId));
+                if (healer && healer->IsInWorld() && healer->GetMap() == player->GetMap())
+                {
+                    AddRenown(healer, config->pointsHealAssist);
+                }
+            }
+        }
+    }
+
     bool RenownModule::OnPreGossipHello(Player* player, Creature* creature)
     {
         if (!player || !creature || !GetConfig()->enabled)
@@ -612,6 +1086,10 @@ namespace cmangos_module
             data.points = total > 4000000000ULL ? 4000000000U : (uint32)total;
             const uint64 spendable = (uint64)data.spendable + gained;
             data.spendable = spendable > 4000000000ULL ? 4000000000U : (uint32)spendable;
+            if (player->InBattleGround())
+            {
+                data.bgEarned += gained;
+            }
             oldRank = data.rank;
             newRank = GetConfig()->GetRankForPoints(data.points);
             data.rank = newRank;

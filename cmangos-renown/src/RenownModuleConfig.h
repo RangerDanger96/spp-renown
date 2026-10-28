@@ -29,6 +29,24 @@ namespace cmangos_module
         uint32 announceEvery;
         bool bolsterEnabled;
 
+        bool lootBags;
+        uint32 lootBagPointsGold;
+        uint32 lootBagPointsPurple;
+        uint32 lootBagPointsBlue;
+        uint32 lootBagItemChanceGold;
+        uint32 lootBagItemChancePurple;
+        uint32 lootBagItemChanceBlue;
+
+        bool streaks;
+        uint32 streakBonusPerKill;
+        uint32 streakBonusMax;
+        uint32 bountyMinStreak;
+        uint32 bountyPerKill;
+        uint32 bountyMax;
+
+        uint32 pointsHealAssist;
+        uint32 assistWindow;
+
         uint32 pointsHonorableKill;
         uint32 pointsKillingBlow;
         uint32 pointsWorldKill;

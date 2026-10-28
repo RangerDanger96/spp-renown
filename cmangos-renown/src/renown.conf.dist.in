@@ -36,6 +36,28 @@
 #        Spells and talents are not changed. Removed when leaving the battleground.
 #        Default: 1
 #
+#    Renown.LootBags
+#        At the end of a battleground the top contributors (by Renown earned in that match, with a small random
+#        factor) win loot bags. Winners: 1st Gold, 2nd-3rd Purple, 4th-6th Blue. Losers: 1st Purple, 2nd-3rd Blue.
+#        Bags give Renown points and a chance at gear from the Renown rewards that fits the player's class, level
+#        and Renown tier. Bots take part in the ranking but only players receive bags.
+#        Default: 1
+#
+#    Renown.LootBags.GoldPoints / PurplePoints / BluePoints            Renown points in each bag
+#    Renown.LootBags.GoldItemChance / PurpleItemChance / BlueItemChance  Chance (%) the bag also holds gear
+#
+#    Renown.Streaks
+#        Kill streaks: from 3 kills without dying each kill gives BonusPerKill x streak extra Renown (max BonusMax).
+#        Streaks are announced to the zone / battleground.
+#        Default: 1
+#
+#    Renown.Bounty.MinStreak / PerKill / Max
+#        Killing a player on a streak of MinStreak or more pays a bounty of PerKill x streak Renown (max Max).
+#
+#    Renown.Points.HealAssist
+#        Renown for each healer who healed one of the attackers within Renown.AssistWindow seconds before an
+#        enemy player died.
+#
 #    Renown.Points.*
 #        Renown awarded per event
 #
@@ -69,6 +91,22 @@ Renown.Rate = 1.0
 Renown.AnnounceEvery = 5
 Renown.Bolster = 1
 
+Renown.LootBags = 1
+Renown.LootBags.GoldPoints = 100
+Renown.LootBags.PurplePoints = 60
+Renown.LootBags.BluePoints = 30
+Renown.LootBags.GoldItemChance = 100
+Renown.LootBags.PurpleItemChance = 50
+Renown.LootBags.BlueItemChance = 25
+
+Renown.Streaks = 1
+Renown.Streaks.BonusPerKill = 2
+Renown.Streaks.BonusMax = 30
+Renown.Bounty.MinStreak = 5
+Renown.Bounty.PerKill = 10
+Renown.Bounty.Max = 250
+Renown.AssistWindow = 15
+
 Renown.Points.HonorableKill = 10
 Renown.Points.KillingBlow = 5
 Renown.Points.WorldKill = 10
@@ -83,6 +121,7 @@ Renown.Points.TowerDefend = 30
 Renown.Points.SecondaryObjective = 20
 Renown.Points.Win = 100
 Renown.Points.Loss = 40
+Renown.Points.HealAssist = 5
 
 Renown.InsigniaRanks = 5,10,15,20,25,30
 Renown.InsigniaItems = 190520,190521,190522,190523,190524,190525

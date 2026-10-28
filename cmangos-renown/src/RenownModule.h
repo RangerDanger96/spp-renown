@@ -40,6 +40,11 @@ namespace cmangos_module
         void OnJoinBattleGround(BattleGround* battleground, Player* player) override;
         void OnLeaveBattleGround(BattleGround* battleground, Player* player) override;
 
+        // Combat hooks: kill streaks, bounties and healing assists
+        void OnDeath(Player* player, Unit* killer) override;
+        void OnDealDamage(Unit* unit, Unit* victim, uint32 health, uint32 damage) override;
+        void OnDealHeal(Unit* unit, Unit* victim, int32 gain, uint32 addHealth) override;
+
         // Gossip hooks
         bool OnPreGossipHello(Player* player, Creature* creature) override;
 
@@ -55,6 +60,8 @@ namespace cmangos_module
             uint32 rank = 1;
             uint64 lastVictim = 0;
             time_t lastVictimTime = 0;
+            uint32 bgEarned = 0;    // renown earned in the current battleground (loot bag ranking)
+            uint32 streak = 0;      // player kills since the last death
         };
 
         // Adds (scaled) renown points to a player and handles rank ups
@@ -88,6 +95,18 @@ namespace cmangos_module
         bool HandleReloadCommand(WorldSession* session, const std::string& args);
 
         void LoadVendorCosts();
+
+        // Loot bags
+        enum BagType { BAG_GOLD = 0, BAG_PURPLE = 1, BAG_BLUE = 2 };
+        void AwardLootBags(BattleGround* battleground, uint32 winnerTeam);
+        void GiveLootBag(Player* player, BagType bag);
+        uint32 PickRewardItem(Player* player) const;
+        void GiveItem(Player* player, uint32 itemId, const std::string& subject);
+        uint32 GetRenownTier(Player* player) const;   // highest unlocked reward tier (0 = none)
+
+        // Streaks / assists
+        void Announce(Player* source, const std::string& text) const;
+        void RecordRecent(std::unordered_map<uint32, std::vector<std::pair<uint32, time_t>>>& map, uint32 key, uint32 who, time_t now);
         uint32 GetRenownCost(uint32 itemId) const;
         void SaveData(uint32 playerId, const RenownData& data);
         // Sends the renown item prices to the RenownBar addon so the vendor window can show "X Renown"
@@ -99,6 +118,12 @@ namespace cmangos_module
         mutable std::mutex m_dataMutex;
 
         std::unordered_map<uint32, uint32> m_vendorCosts; // item entry -> renown cost
+        std::unordered_map<uint32, uint32> m_vendorTiers; // item entry -> reward tier (0 = open)
+
+        // victim guid -> recent attackers, player guid -> recent healers (guid, time)
+        std::unordered_map<uint32, std::vector<std::pair<uint32, time_t>>> m_attackers;
+        std::unordered_map<uint32, std::vector<std::pair<uint32, time_t>>> m_healers;
+        mutable std::mutex m_combatMutex;
         mutable std::mutex m_vendorMutex;
 
         std::unordered_map<uint32, uint32> m_bolster;   // player guid -> bolstered level

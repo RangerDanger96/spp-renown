@@ -74,29 +74,30 @@ w("DROP TEMPORARY TABLE IF EXISTS tmp_it;")
 w("")
 
 w("-- Reward stock: low-level sets first, then the Warsong Gulch reward lists, unlocked by renown tier instead of reputation")
-rows=[]; costs={}
+rows=[]; costs={}; tiers={}
 for qm,src in [(190100,14753),(190101,14754)]:
     k=0
     for it in gear:
         inv=int(q(f"select InventoryType from item_template where entry={it['base']}")[0][0])
         cond=59110 if it['bracket']=='t0' else 59112
-        costs[it['entry']]=cost(T0_COST if it['bracket']=='t0' else TIER_COST[0], inv)
+        costs[it['entry']]=cost(T0_COST if it['bracket']=='t0' else TIER_COST[0], inv); tiers[it['entry']]=0 if it['bracket']=='t0' else 1
         rows.append(f"({qm},{it['entry']},0,0,{k},{cond},'Renown {'levels 1-9' if cond==59110 else 'levels 10-19, tier 1'}')"); k+=1
     items=q(f"select v.item,i.RequiredLevel,i.class,i.InventoryType from npc_vendor v join item_template i on i.entry=v.item where v.entry={src} order by i.RequiredLevel,v.item")
     for item,req,cls,inv in items:
         t=tier_for(int(req))
         rows.append(f"({qm},{item},0,0,{k},{59101+t},'Renown tier {t+1}')"); k+=1
         if int(cls)!=0:            # consumables (rations, bandages, draughts) keep their gold price
-            costs[int(item)]=cost(TIER_COST[t], int(inv))
+            costs[int(item)]=cost(TIER_COST[t], int(inv)); tiers[int(item)]=t+1
 w("INSERT INTO npc_vendor (entry,item,maxcount,incrtime,slot,condition_id,comments) VALUES")
 w(",\n".join(rows)+";")
 w("")
 w("-- Renown prices: read by the Renown server module (paid with spendable Renown points, not gold).")
 w("-- Gold price is 0 so the client never blocks the purchase for lack of money; the RenownBar addon shows the Renown cost.")
-w("CREATE TABLE IF NOT EXISTS custom_renown_vendor (item MEDIUMINT UNSIGNED NOT NULL PRIMARY KEY, cost INT UNSIGNED NOT NULL DEFAULT 0) ENGINE=MyISAM DEFAULT CHARSET=utf8 COMMENT='Renown vendor prices';")
-w("DELETE FROM custom_renown_vendor;")
-w("INSERT INTO custom_renown_vendor (item,cost) VALUES")
-w(",\n".join(f"({i},{c})" for i,c in sorted(costs.items()))+";")
+w("-- tier: Renown reward tier that unlocks the item (0 = no insignia needed); also used for battleground loot bags")
+w("DROP TABLE IF EXISTS custom_renown_vendor;")
+w("CREATE TABLE custom_renown_vendor (item MEDIUMINT UNSIGNED NOT NULL PRIMARY KEY, cost INT UNSIGNED NOT NULL DEFAULT 0, tier TINYINT UNSIGNED NOT NULL DEFAULT 0) ENGINE=MyISAM DEFAULT CHARSET=utf8 COMMENT='Renown vendor prices';")
+w("INSERT INTO custom_renown_vendor (item,cost,tier) VALUES")
+w(",\n".join(f"({i},{c},{tiers[i]})" for i,c in sorted(costs.items()))+";")
 w("UPDATE item_template i JOIN custom_renown_vendor c ON c.item=i.entry SET i.BuyPrice=0, i.SellPrice=0;")
 open('/root/renown/zz_renown.sql','w',newline='\r\n').write("\n".join(L)+"\n")
 print(len(rows),'vendor rows',len(costs),'renown items')

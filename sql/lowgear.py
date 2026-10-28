@@ -1,6 +1,6 @@
 import subprocess
 def q(sql):
-    out=subprocess.run(["mariadb","world","-B","-N","-e",sql],capture_output=True,text=True).stdout or ""
+    out=subprocess.run(["mariadb","world","-B","-N","-e",sql],capture_output=True,text=True,check=True).stdout
     return [l.split("\t") for l in out.strip().split("\n") if l]
 
 AGI,STR,INT,SPI,STA=3,4,5,6,7
