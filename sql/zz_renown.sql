@@ -56,9 +56,9 @@ INSERT INTO conditions (condition_entry,type,value1,value2,value3,value4,flags,c
 SET @rt6 := (SELECT condition_entry FROM conditions WHERE type=23 AND value1=190525 AND value2=1 AND value3=0 AND value4=0 AND flags=0 LIMIT 1);
 
 -- Quartermasters become vendors too
-UPDATE creature_template SET NpcFlags = NpcFlags | 128 WHERE Entry IN (190100,190101);
+UPDATE creature_template SET NpcFlags = (NpcFlags & ~128) | 4 WHERE Entry IN (190100,190101); -- 4 = vendor in 1.12 (128 is innkeeper)
 INSERT INTO gossip_menu_option (menu_id,id,option_icon,option_text,option_broadcast_text,option_id,npc_option_npcflag,action_menu_id,action_poi_id,action_script_id,box_coded,box_money,box_text,box_broadcast_text,condition_id) VALUES
-(59000,10,1,'Show me the Renown rewards.',0,3,128,0,0,0,0,0,'',0,0);
+(59000,10,1,'Show me the Renown rewards.',0,3,4,0,0,0,0,0,'',0,0);
 
 -- Reward stock: the Warsong Gulch reward lists, unlocked by renown tier instead of reputation
 INSERT INTO npc_vendor (entry,item,maxcount,incrtime,slot,condition_id,comments) VALUES
