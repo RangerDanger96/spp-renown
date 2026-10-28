@@ -382,7 +382,7 @@ namespace cmangos_module
         const float dx = home.x - target.x, dy = home.y - target.y;
         const float len = std::max(1.0f, std::sqrt(dx * dx + dy * dy));
         const float back = std::min(30.0f, len);
-        const float angle = frand(0.0f, 2.0f * float(M_PI));
+        const float angle = frand(0.0f, 6.2831853f);
         const float spread = frand(0.0f, 8.0f);
         x = target.x + dx / len * back + std::cos(angle) * spread;
         y = target.y + dy / len * back + std::sin(angle) * spread;
@@ -614,7 +614,7 @@ namespace cmangos_module
             for (size_t i = 0; i < m_rvrObjectives.size(); ++i)
             {
                 RvRObjective& o = m_rvrObjectives[i];
-                std::vector<Player*> near[2];
+                std::vector<Player*> nearby[2];
                 for (Player* player : members)
                 {
                     if (!player->IsAlive() || m_rvrChickens.count(player->GetObjectGuid().GetCounter()) || player->IsGameMaster())
@@ -625,16 +625,16 @@ namespace cmangos_module
                     const float dx = player->GetPositionX() - o.x, dy = player->GetPositionY() - o.y;
                     if (dx * dx + dy * dy <= radius * radius && std::fabs(player->GetPositionZ() - o.z) < 20.0f)
                     {
-                        near[player->GetTeam() == ALLIANCE ? 0 : 1].push_back(player);
+                        nearby[player->GetTeam() == ALLIANCE ? 0 : 1].push_back(player);
                     }
                 }
 
                 uint32 team = 0;
-                if (!near[0].empty() && near[1].empty())
+                if (!nearby[0].empty() && nearby[1].empty())
                 {
                     team = ALLIANCE;
                 }
-                else if (near[0].empty() && !near[1].empty())
+                else if (nearby[0].empty() && !nearby[1].empty())
                 {
                     team = HORDE;
                 }
@@ -661,13 +661,13 @@ namespace cmangos_module
                              << (previous ? " from the " : "") << (previous ? TeamName(previous) : "") << "!";
                         RvRAnnounce(text.str());
 
-                        for (Player* player : near[team == ALLIANCE ? 0 : 1])
+                        for (Player* player : nearby[team == ALLIANCE ? 0 : 1])
                         {
                             AddRenown(player, config->rvrCapturePoints);
                         }
                     }
                 }
-                else if (!near[0].empty() && !near[1].empty())
+                else if (!nearby[0].empty() && !nearby[1].empty())
                 {
                     // contested: progress holds
                 }
