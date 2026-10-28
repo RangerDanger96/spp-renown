@@ -65,23 +65,23 @@ INSERT INTO npc_trainer (entry,spell,spellcost,reqskill,reqskillvalue,reqlevel)
  CROSS JOIN (SELECT 190100 AS e UNION SELECT 190101) q;
 
 -- Class conditions (type 14 = player race/class mask); reuse existing rows if present
-INSERT IGNORE INTO conditions (type,value1,value2,value3,value4,flags,comments) VALUES (14,0,1,0,0,0,'Player ClassMask: 1');
+INSERT INTO conditions (condition_entry,type,value1,value2,value3,value4,flags,comments) SELECT 5310101,14,0,1,0,0,0,'Player ClassMask: 1' FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM conditions WHERE type=14 AND value1=0 AND value2=1 AND value3=0 AND value4=0 AND flags=0) AND NOT EXISTS (SELECT 1 FROM conditions WHERE condition_entry=5310101);
 SET @bgc1 := (SELECT condition_entry FROM conditions WHERE type=14 AND value1=0 AND value2=1 AND value3=0 AND value4=0 AND flags=0 LIMIT 1);
-INSERT IGNORE INTO conditions (type,value1,value2,value3,value4,flags,comments) VALUES (14,0,2,0,0,0,'Player ClassMask: 2');
+INSERT INTO conditions (condition_entry,type,value1,value2,value3,value4,flags,comments) SELECT 5310102,14,0,2,0,0,0,'Player ClassMask: 2' FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM conditions WHERE type=14 AND value1=0 AND value2=2 AND value3=0 AND value4=0 AND flags=0) AND NOT EXISTS (SELECT 1 FROM conditions WHERE condition_entry=5310102);
 SET @bgc2 := (SELECT condition_entry FROM conditions WHERE type=14 AND value1=0 AND value2=2 AND value3=0 AND value4=0 AND flags=0 LIMIT 1);
-INSERT IGNORE INTO conditions (type,value1,value2,value3,value4,flags,comments) VALUES (14,0,4,0,0,0,'Player ClassMask: 4');
+INSERT INTO conditions (condition_entry,type,value1,value2,value3,value4,flags,comments) SELECT 5310103,14,0,4,0,0,0,'Player ClassMask: 4' FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM conditions WHERE type=14 AND value1=0 AND value2=4 AND value3=0 AND value4=0 AND flags=0) AND NOT EXISTS (SELECT 1 FROM conditions WHERE condition_entry=5310103);
 SET @bgc3 := (SELECT condition_entry FROM conditions WHERE type=14 AND value1=0 AND value2=4 AND value3=0 AND value4=0 AND flags=0 LIMIT 1);
-INSERT IGNORE INTO conditions (type,value1,value2,value3,value4,flags,comments) VALUES (14,0,8,0,0,0,'Player ClassMask: 8');
+INSERT INTO conditions (condition_entry,type,value1,value2,value3,value4,flags,comments) SELECT 5310104,14,0,8,0,0,0,'Player ClassMask: 8' FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM conditions WHERE type=14 AND value1=0 AND value2=8 AND value3=0 AND value4=0 AND flags=0) AND NOT EXISTS (SELECT 1 FROM conditions WHERE condition_entry=5310104);
 SET @bgc4 := (SELECT condition_entry FROM conditions WHERE type=14 AND value1=0 AND value2=8 AND value3=0 AND value4=0 AND flags=0 LIMIT 1);
-INSERT IGNORE INTO conditions (type,value1,value2,value3,value4,flags,comments) VALUES (14,0,16,0,0,0,'Player ClassMask: 16');
+INSERT INTO conditions (condition_entry,type,value1,value2,value3,value4,flags,comments) SELECT 5310105,14,0,16,0,0,0,'Player ClassMask: 16' FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM conditions WHERE type=14 AND value1=0 AND value2=16 AND value3=0 AND value4=0 AND flags=0) AND NOT EXISTS (SELECT 1 FROM conditions WHERE condition_entry=5310105);
 SET @bgc5 := (SELECT condition_entry FROM conditions WHERE type=14 AND value1=0 AND value2=16 AND value3=0 AND value4=0 AND flags=0 LIMIT 1);
-INSERT IGNORE INTO conditions (type,value1,value2,value3,value4,flags,comments) VALUES (14,0,64,0,0,0,'Player ClassMask: 64');
+INSERT INTO conditions (condition_entry,type,value1,value2,value3,value4,flags,comments) SELECT 5310106,14,0,64,0,0,0,'Player ClassMask: 64' FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM conditions WHERE type=14 AND value1=0 AND value2=64 AND value3=0 AND value4=0 AND flags=0) AND NOT EXISTS (SELECT 1 FROM conditions WHERE condition_entry=5310106);
 SET @bgc6 := (SELECT condition_entry FROM conditions WHERE type=14 AND value1=0 AND value2=64 AND value3=0 AND value4=0 AND flags=0 LIMIT 1);
-INSERT IGNORE INTO conditions (type,value1,value2,value3,value4,flags,comments) VALUES (14,0,128,0,0,0,'Player ClassMask: 128');
+INSERT INTO conditions (condition_entry,type,value1,value2,value3,value4,flags,comments) SELECT 5310107,14,0,128,0,0,0,'Player ClassMask: 128' FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM conditions WHERE type=14 AND value1=0 AND value2=128 AND value3=0 AND value4=0 AND flags=0) AND NOT EXISTS (SELECT 1 FROM conditions WHERE condition_entry=5310107);
 SET @bgc7 := (SELECT condition_entry FROM conditions WHERE type=14 AND value1=0 AND value2=128 AND value3=0 AND value4=0 AND flags=0 LIMIT 1);
-INSERT IGNORE INTO conditions (type,value1,value2,value3,value4,flags,comments) VALUES (14,0,256,0,0,0,'Player ClassMask: 256');
+INSERT INTO conditions (condition_entry,type,value1,value2,value3,value4,flags,comments) SELECT 5310108,14,0,256,0,0,0,'Player ClassMask: 256' FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM conditions WHERE type=14 AND value1=0 AND value2=256 AND value3=0 AND value4=0 AND flags=0) AND NOT EXISTS (SELECT 1 FROM conditions WHERE condition_entry=5310108);
 SET @bgc8 := (SELECT condition_entry FROM conditions WHERE type=14 AND value1=0 AND value2=256 AND value3=0 AND value4=0 AND flags=0 LIMIT 1);
-INSERT IGNORE INTO conditions (type,value1,value2,value3,value4,flags,comments) VALUES (14,0,1024,0,0,0,'Player ClassMask: 1024');
+INSERT INTO conditions (condition_entry,type,value1,value2,value3,value4,flags,comments) SELECT 5310109,14,0,1024,0,0,0,'Player ClassMask: 1024' FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM conditions WHERE type=14 AND value1=0 AND value2=1024 AND value3=0 AND value4=0 AND flags=0) AND NOT EXISTS (SELECT 1 FROM conditions WHERE condition_entry=5310109);
 SET @bgc9 := (SELECT condition_entry FROM conditions WHERE type=14 AND value1=0 AND value2=1024 AND value3=0 AND value4=0 AND flags=0 LIMIT 1);
 
 -- Gossip

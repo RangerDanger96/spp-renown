@@ -34,18 +34,25 @@ UPDATE tmp_it SET entry=190525, name='Renown Insignia: Tier 6', class=15, subcla
 INSERT INTO item_template SELECT * FROM tmp_it;
 DROP TEMPORARY TABLE IF EXISTS tmp_it;
 
--- One condition per tier: player owns the insignia (bags or bank). Reuses existing rows if present.
-INSERT IGNORE INTO conditions (type,value1,value2,value3,value4,flags,comments) VALUES (23,190520,1,0,0,0,'Renown: owns Renown Insignia Tier 1');
+-- One condition per tier: player owns the insignia (bags or bank).
+-- Fixed IDs 5310111-5310116, created only if no identical condition exists yet (no auto-increment).
+DELETE FROM conditions WHERE (condition_entry=5310111 AND NOT (type=23 AND value1=190520)) OR (type=23 AND value1=190520 AND condition_entry<>5310111);
+INSERT INTO conditions (condition_entry,type,value1,value2,value3,value4,flags,comments) SELECT 5310111,23,190520,1,0,0,0,'Renown: owns Renown Insignia Tier 1' FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM conditions WHERE condition_entry=5310111);
 SET @rt1 := (SELECT condition_entry FROM conditions WHERE type=23 AND value1=190520 AND value2=1 AND value3=0 AND value4=0 AND flags=0 LIMIT 1);
-INSERT IGNORE INTO conditions (type,value1,value2,value3,value4,flags,comments) VALUES (23,190521,1,0,0,0,'Renown: owns Renown Insignia Tier 2');
+DELETE FROM conditions WHERE (condition_entry=5310112 AND NOT (type=23 AND value1=190521)) OR (type=23 AND value1=190521 AND condition_entry<>5310112);
+INSERT INTO conditions (condition_entry,type,value1,value2,value3,value4,flags,comments) SELECT 5310112,23,190521,1,0,0,0,'Renown: owns Renown Insignia Tier 2' FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM conditions WHERE condition_entry=5310112);
 SET @rt2 := (SELECT condition_entry FROM conditions WHERE type=23 AND value1=190521 AND value2=1 AND value3=0 AND value4=0 AND flags=0 LIMIT 1);
-INSERT IGNORE INTO conditions (type,value1,value2,value3,value4,flags,comments) VALUES (23,190522,1,0,0,0,'Renown: owns Renown Insignia Tier 3');
+DELETE FROM conditions WHERE (condition_entry=5310113 AND NOT (type=23 AND value1=190522)) OR (type=23 AND value1=190522 AND condition_entry<>5310113);
+INSERT INTO conditions (condition_entry,type,value1,value2,value3,value4,flags,comments) SELECT 5310113,23,190522,1,0,0,0,'Renown: owns Renown Insignia Tier 3' FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM conditions WHERE condition_entry=5310113);
 SET @rt3 := (SELECT condition_entry FROM conditions WHERE type=23 AND value1=190522 AND value2=1 AND value3=0 AND value4=0 AND flags=0 LIMIT 1);
-INSERT IGNORE INTO conditions (type,value1,value2,value3,value4,flags,comments) VALUES (23,190523,1,0,0,0,'Renown: owns Renown Insignia Tier 4');
+DELETE FROM conditions WHERE (condition_entry=5310114 AND NOT (type=23 AND value1=190523)) OR (type=23 AND value1=190523 AND condition_entry<>5310114);
+INSERT INTO conditions (condition_entry,type,value1,value2,value3,value4,flags,comments) SELECT 5310114,23,190523,1,0,0,0,'Renown: owns Renown Insignia Tier 4' FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM conditions WHERE condition_entry=5310114);
 SET @rt4 := (SELECT condition_entry FROM conditions WHERE type=23 AND value1=190523 AND value2=1 AND value3=0 AND value4=0 AND flags=0 LIMIT 1);
-INSERT IGNORE INTO conditions (type,value1,value2,value3,value4,flags,comments) VALUES (23,190524,1,0,0,0,'Renown: owns Renown Insignia Tier 5');
+DELETE FROM conditions WHERE (condition_entry=5310115 AND NOT (type=23 AND value1=190524)) OR (type=23 AND value1=190524 AND condition_entry<>5310115);
+INSERT INTO conditions (condition_entry,type,value1,value2,value3,value4,flags,comments) SELECT 5310115,23,190524,1,0,0,0,'Renown: owns Renown Insignia Tier 5' FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM conditions WHERE condition_entry=5310115);
 SET @rt5 := (SELECT condition_entry FROM conditions WHERE type=23 AND value1=190524 AND value2=1 AND value3=0 AND value4=0 AND flags=0 LIMIT 1);
-INSERT IGNORE INTO conditions (type,value1,value2,value3,value4,flags,comments) VALUES (23,190525,1,0,0,0,'Renown: owns Renown Insignia Tier 6');
+DELETE FROM conditions WHERE (condition_entry=5310116 AND NOT (type=23 AND value1=190525)) OR (type=23 AND value1=190525 AND condition_entry<>5310116);
+INSERT INTO conditions (condition_entry,type,value1,value2,value3,value4,flags,comments) SELECT 5310116,23,190525,1,0,0,0,'Renown: owns Renown Insignia Tier 6' FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM conditions WHERE condition_entry=5310116);
 SET @rt6 := (SELECT condition_entry FROM conditions WHERE type=23 AND value1=190525 AND value2=1 AND value3=0 AND value4=0 AND flags=0 LIMIT 1);
 
 -- Quartermasters become vendors too
