@@ -175,3 +175,57 @@ index 223f2a9..200a03a 100644
      uint32 new_count = pCreature->UpdateVendorItemCurrentCount(crItem, totalCount);
  
      WorldPacket data(SMSG_BUY_ITEM, 8 + 4 + 4 + 4);
+diff --git a/src/game/Entities/Player.h b/src/game/Entities/Player.h
+index 12b30b2..9cef196 100644
+--- a/src/game/Entities/Player.h
++++ b/src/game/Entities/Player.h
+@@ -912,6 +912,13 @@ class Player : public Unit
+ 
+         float GetNativeScale() const override;
+ 
++        // SPP Renown: bolster (battlegrounds / RvR lake). Combat formulas treat the player as this level.
++        void SetBolsterLevel(uint32 level) { m_bolsterLevel = level; }
++        uint32 GetBolsterLevel() const { return m_bolsterLevel; }
++        uint32 GetEffectiveLevel() const { return std::max(GetLevel(), m_bolsterLevel); }
++        uint32 GetLevelForTarget(Unit const* /*target*/) const override { return GetEffectiveLevel(); }
++        uint32 m_bolsterLevel = 0;
++
+         bool TeleportTo(uint32 mapid, float x, float y, float z, float orientation, uint32 options = 0, AreaTrigger const* at = nullptr, GenericTransport* transport = nullptr);
+ 
+         bool TeleportTo(WorldLocation const& loc, uint32 options = 0)
+diff --git a/src/game/Entities/StatSystem.cpp b/src/game/Entities/StatSystem.cpp
+index 85630ef..aa6fabd 100644
+--- a/src/game/Entities/StatSystem.cpp
++++ b/src/game/Entities/StatSystem.cpp
+@@ -213,7 +213,7 @@ void Unit::UpdateMaxPower(Powers power)
+ void Player::UpdateAttackPowerAndDamage(bool ranged)
+ {
+     float val2 = 0.0f;
+-    float level = float(GetLevel());
++    float level = float(GetEffectiveLevel());     // SPP Renown: bolster
+ 
+     UnitMods unitMod = ranged ? UNIT_MOD_ATTACK_POWER_RANGED : UNIT_MOD_ATTACK_POWER;
+ 
+diff --git a/src/game/Entities/Unit.cpp b/src/game/Entities/Unit.cpp
+index f8ceaef..9334dc2 100644
+--- a/src/game/Entities/Unit.cpp
++++ b/src/game/Entities/Unit.cpp
+@@ -3020,7 +3020,8 @@ uint32 Unit::GetDefenseSkillValue(Unit const* target) const
+         uint32 value = (target && target->GetTypeId() == TYPEID_PLAYER)
+                        ? std::max(((Player*)this)->GetSkillMax(SKILL_DEFENSE), ((Player*)this)->GetSkillValue(SKILL_DEFENSE))
+                        : ((Player*)this)->GetSkillValue(SKILL_DEFENSE);
+-        return value;
++        // SPP Renown: bolstered players fight with the skill of their bolster level
++        return std::max(value, ((Player*)this)->GetBolsterLevel() * 5);
+     }
+     return GetUnitMeleeSkill(target);
+ }
+@@ -4137,6 +4138,8 @@ uint32 Unit::GetWeaponSkillValue(WeaponAttackType attType, Unit const* target) c
+         value = (target && target->GetTypeId() == TYPEID_PLAYER)
+                 ? std::max(((Player*)this)->GetSkillMax(skill), ((Player*)this)->GetSkillValue(skill))
+                 : ((Player*)this)->GetSkillValue(skill);
++        // SPP Renown: bolstered players fight with the skill of their bolster level
++        value = std::max(value, ((Player*)this)->GetBolsterLevel() * 5);
+     }
+     else
+         value = GetUnitMeleeSkill(target);

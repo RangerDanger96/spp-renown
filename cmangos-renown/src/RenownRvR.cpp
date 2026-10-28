@@ -415,6 +415,10 @@ namespace cmangos_module
             }
 
             ApplyLevelStats(player, cap);
+            if (player->isRealPlayer())
+            {
+                ChatHandler(player).PSendSysMessage("|cff00ccffBolster:|r you fight as a level %u on the Barrens Front (stats, health, mana, skills and hit chance). New spells still come from leveling.", cap);
+            }
         }
 
         player->UpdatePvP(true, true);
@@ -570,6 +574,11 @@ namespace cmangos_module
             {
                 seen.insert(playerId);
                 members.push_back(player);
+                if (!player->IsPvP())
+                {
+                    player->UpdatePvP(true, true);   // always flagged on the front
+                }
+
                 if (m_rvrChickens.count(playerId))
                 {
                     // keep the chicken a chicken (other effects may clear these)
@@ -756,9 +765,11 @@ namespace cmangos_module
         {
             m_rvrDirty = false;
             m_rvrStatusTimer = 0;
-            for (Player* player : members)
+            // Everyone on the front plus the rest of the Barrens (for the world map banners)
+            for (Player* player : players)
             {
-                if (player->isRealPlayer())
+                if (player->isRealPlayer() && player->GetMapId() == RVR_MAP &&
+                    (player->GetZoneId() == 17 || RvRIsMember(player->GetObjectGuid().GetCounter())))
                 {
                     RvRSendStatus(player);
                 }

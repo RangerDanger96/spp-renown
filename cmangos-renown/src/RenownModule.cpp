@@ -288,6 +288,9 @@ namespace cmangos_module
             return;
         }
 
+        // Combat formulas (hit, skills, attack power, spell resists) use the bolster level too (core patch)
+        player->SetBolsterLevel(level > player->GetLevel() ? level : 0);
+
         PlayerLevelInfo info;
         sObjectMgr.GetPlayerLevelInfo(player->getRace(), player->getClass(), level, &info);
 
@@ -346,7 +349,7 @@ namespace cmangos_module
 
         if (player->isRealPlayer())
         {
-            ChatHandler(player).PSendSysMessage("|cff00ccffBolster:|r your base stats are raised to level %u for this battleground.", target);
+            ChatHandler(player).PSendSysMessage("|cff00ccffBolster:|r you fight as a level %u in this battleground (stats, health, mana, skills and hit chance).", target);
         }
     }
 
