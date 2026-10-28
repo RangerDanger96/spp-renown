@@ -60,6 +60,7 @@ namespace cmangos_module
 
         LoadVendorCosts();
         RvRInit();
+        QuestsInit();
 
         sLog.outString("Renown module initialized (max rank %u, %u items cost Renown)", GetConfig()->maxRank, (uint32)m_vendorCosts.size());
     }
@@ -83,6 +84,8 @@ namespace cmangos_module
         }
 
         data.rank = GetConfig()->GetRankForPoints(data.points);
+
+        QuestsLoad(player);
 
         std::lock_guard<std::mutex> lock(m_dataMutex);
         m_data[playerId] = data;
@@ -112,6 +115,11 @@ namespace cmangos_module
         if (data.points > 0 || data.spendable > 0)
         {
             SaveData(playerId, data);
+        }
+
+        if (!player->GetDailyQuests().empty())
+        {
+            QuestsSave(player);
         }
     }
 
@@ -972,6 +980,25 @@ namespace cmangos_module
             }
         }
 
+        // War board credits for kills on the front
+        if (RvRIsMember(player->GetObjectGuid().GetCounter()))
+        {
+            QuestCredit(player, 190822);           // enemy player defeated
+            if (oldStreak >= 3)
+            {
+                QuestCredit(player, 190824);       // killing spree ended
+            }
+
+            if (m_rvrObjectives.size() == 3)
+            {
+                const float dx = victim->GetPositionX() - m_rvrObjectives[1].x, dy = victim->GetPositionY() - m_rvrObjectives[1].y;
+                if (dx * dx + dy * dy <= 60.0f * 60.0f)
+                {
+                    QuestCredit(player, 190828);   // fight at the Oasis
+                }
+            }
+        }
+
         // RvR lake: killing an enemy near an objective your side holds
         if (config->rvrDefendPoints && RvRIsMember(player->GetObjectGuid().GetCounter()))
         {
@@ -981,6 +1008,7 @@ namespace cmangos_module
                 if (o.owner == player->GetTeam() && dx * dx + dy * dy <= 40.0f * 40.0f)
                 {
                     AddRenown(player, config->rvrDefendPoints);
+                    QuestCredit(player, 190821);   // war board: defend
                     break;
                 }
             }
@@ -1033,6 +1061,11 @@ namespace cmangos_module
                 Player* healer = sObjectMgr.GetPlayer(ObjectGuid(HIGHGUID_PLAYER, healerId));
                 if (healer && healer->IsInWorld() && healer->GetMap() == player->GetMap())
                 {
+                    if (RvRIsMember(healerId))
+                    {
+                        QuestCredit(healer, 190823);   // war board: healing assist
+                    }
+
                     AddRenown(healer, config->pointsHealAssist);
                 }
             }

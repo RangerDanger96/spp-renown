@@ -247,6 +247,10 @@ namespace cmangos_module
 
             const uint32 score = entry.second * urand(80, 120);
             (player->GetTeam() == winner ? winners : losers).push_back({ player, score });
+            if (player->GetTeam() == winner)
+            {
+                QuestCredit(player, 190829);   // war board weekly: win the front
+            }
         }
 
         auto byScore = [](const Entry& a, const Entry& b) { return a.score > b.score; };
@@ -656,6 +660,7 @@ namespace cmangos_module
             RvRReset();
         }
 
+        QuestsUpdate(diff);
         RvRUpdate(diff);
     }
 
@@ -697,6 +702,19 @@ namespace cmangos_module
             {
                 seen.insert(playerId);
                 members.push_back(player);
+                if (player->isRealPlayer() && m_questsReady && player->IsAlive())
+                {
+                    // war board: scout the three objectives
+                    for (size_t i = 0; i < m_rvrObjectives.size(); ++i)
+                    {
+                        const float dx = player->GetPositionX() - m_rvrObjectives[i].x, dy = player->GetPositionY() - m_rvrObjectives[i].y;
+                        if (dx * dx + dy * dy <= 30.0f * 30.0f)
+                        {
+                            QuestCredit(player, 190825 + uint32(i));
+                        }
+                    }
+                }
+
                 if (!player->IsPvP())
                 {
                     player->UpdatePvP(true, true);   // always flagged on the front
@@ -796,6 +814,7 @@ namespace cmangos_module
                         for (Player* player : nearby[team == ALLIANCE ? 0 : 1])
                         {
                             AddRenown(player, config->rvrCapturePoints);
+                            QuestCredit(player, 190820);   // war board: capture
                         }
                     }
                 }

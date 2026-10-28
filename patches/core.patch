@@ -148,10 +148,42 @@ index 6e711ae..db7f79a 100644
  class BattleGroundWS : public BattleGround
  {
 diff --git a/src/game/Entities/Player.cpp b/src/game/Entities/Player.cpp
-index 223f2a9..200a03a 100644
+index 223f2a9..a324902 100644
 --- a/src/game/Entities/Player.cpp
 +++ b/src/game/Entities/Player.cpp
-@@ -18198,6 +18198,12 @@ bool Player::BuyItemFromVendor(ObjectGuid vendorGuid, uint32 item, uint8 count,
+@@ -12991,6 +12991,10 @@ void Player::RewardQuest(Quest const* pQuest, uint32 reward, Object* questGiver,
+     // Used for client inform but rewarded only in case not max level
+     uint32 xp = uint32(pQuest->XPValue(this) * sWorld.getConfig(CONFIG_FLOAT_RATE_XP_QUEST));
+ 
++#ifdef ENABLE_MODULES
++    sModuleMgr.OnGetQuestXP(this, pQuest, xp);
++#endif
++
+     if (GetLevel() < sWorld.getConfig(CONFIG_UINT32_MAX_PLAYER_LEVEL))
+         GiveXP(xp, nullptr);
+     else
+@@ -13006,6 +13010,9 @@ void Player::RewardQuest(Quest const* pQuest, uint32 reward, Object* questGiver,
+     if (pQuest->IsWeekly())
+         SetWeeklyQuestStatus(quest_id);
+ 
++    if (pQuest->IsDaily())
++        SetDailyQuestStatus(quest_id);
++
+     if (!pQuest->IsRepeatable())
+         SetQuestStatus(quest_id, QUEST_STATUS_COMPLETE);
+     else
+@@ -13555,6 +13562,10 @@ bool Player::SatisfyQuestPrevChain(Quest const* qInfo, bool msg) const
+ 
+ bool Player::SatisfyQuestWeek(Quest const* qInfo) const
+ {
++    // SPP Renown: daily quests use the same check
++    if (qInfo->IsDaily() && m_dailyquests.find(qInfo->GetQuestId()) != m_dailyquests.end())
++        return false;
++
+     if (!qInfo->IsWeekly() || m_weeklyquests.empty())
+         return true;
+ 
+@@ -18198,6 +18209,12 @@ bool Player::BuyItemFromVendor(ObjectGuid vendorGuid, uint32 item, uint8 count,
      // reputation discount
      price = uint32(floor(price * GetReputationPriceDiscount(pCreature)));
  
@@ -164,7 +196,7 @@ index 223f2a9..200a03a 100644
      if (GetMoney() < price)
      {
          SendBuyError(BUY_ERR_NOT_ENOUGHT_MONEY, pCreature, item, 0);
-@@ -18252,6 +18258,10 @@ bool Player::BuyItemFromVendor(ObjectGuid vendorGuid, uint32 item, uint8 count,
+@@ -18252,6 +18269,10 @@ bool Player::BuyItemFromVendor(ObjectGuid vendorGuid, uint32 item, uint8 count,
      if (!pItem)
          return false;
  
@@ -176,7 +208,7 @@ index 223f2a9..200a03a 100644
  
      WorldPacket data(SMSG_BUY_ITEM, 8 + 4 + 4 + 4);
 diff --git a/src/game/Entities/Player.h b/src/game/Entities/Player.h
-index 12b30b2..9cef196 100644
+index 12b30b2..1318d7f 100644
 --- a/src/game/Entities/Player.h
 +++ b/src/game/Entities/Player.h
 @@ -912,6 +912,13 @@ class Player : public Unit
@@ -193,6 +225,18 @@ index 12b30b2..9cef196 100644
          bool TeleportTo(uint32 mapid, float x, float y, float z, float orientation, uint32 options = 0, AreaTrigger const* at = nullptr, GenericTransport* transport = nullptr);
  
          bool TeleportTo(WorldLocation const& loc, uint32 options = 0)
+@@ -1302,6 +1309,11 @@ class Player : public Unit
+         QuestStatus GetQuestStatus(uint32 quest_id) const;
+         void SetQuestStatus(uint32 quest_id, QuestStatus status);
+ 
++        // SPP Renown: daily quests (persistence and reset are done by the Renown module)
++        void SetDailyQuestStatus(uint32 quest_id) { m_dailyquests.insert(quest_id); }
++        void ResetDailyQuestStatus() { m_dailyquests.clear(); }
++        std::set<uint32> const& GetDailyQuests() const { return m_dailyquests; }
++        std::set<uint32> m_dailyquests;
+         void SetWeeklyQuestStatus(uint32 quest_id);
+         void ResetWeeklyQuestStatus();
+ 
 diff --git a/src/game/Entities/StatSystem.cpp b/src/game/Entities/StatSystem.cpp
 index 85630ef..aa6fabd 100644
 --- a/src/game/Entities/StatSystem.cpp
@@ -229,3 +273,23 @@ index f8ceaef..9334dc2 100644
      }
      else
          value = GetUnitMeleeSkill(target);
+diff --git a/src/game/Quests/QuestDef.h b/src/game/Quests/QuestDef.h
+index 439d67b..cf11496 100644
+--- a/src/game/Quests/QuestDef.h
++++ b/src/game/Quests/QuestDef.h
+@@ -141,6 +141,7 @@ enum QuestFlags
+     QUEST_FLAGS_NO_MONEY_FROM_XP = 0x00000100,              // Not used currently: _DELIVER_MORE Quest needs more than normal _q-item_ drops from mobs
+     QUEST_FLAGS_HIDDEN_REWARDS = 0x00000200,                // Items and money rewarded only sent in SMSG_QUESTGIVER_OFFER_REWARD (not in SMSG_QUESTGIVER_QUEST_DETAILS or in client quest log(SMSG_QUEST_QUERY_RESPONSE))
+     QUEST_FLAGS_AUTO_REWARDED  = 0x00000400,                // These quests are automatically rewarded on quest complete and they will never appear in quest log client side.
++    QUEST_FLAGS_DAILY          = 0x00001000,                // SPP Renown: daily quest, can be done once a day (reset handled by the Renown module)
+     QUEST_FLAGS_WEEKLY         = 0x00008000,                // Weekly quest. Can be done once a week. Quests reset at regular intervals for all players.
+ };
+ 
+@@ -247,6 +248,7 @@ class Quest
+         bool   IsRepeatable() const { return (m_SpecialFlags & QUEST_SPECIAL_FLAG_REPEATABLE) != 0; }
+         bool   IsAutoComplete() const { return !QuestMethod; }
+         bool   IsWeekly() const { return (m_QuestFlags & QUEST_FLAGS_WEEKLY) != 0; }
++        bool   IsDaily() const { return (m_QuestFlags & QUEST_FLAGS_DAILY) != 0; }
+         bool   IsAllowedInRaid() const;
+ 
+         // quest can be fully deactivated and will not be available for any player

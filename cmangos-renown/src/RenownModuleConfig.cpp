@@ -73,6 +73,14 @@ namespace cmangos_module
     , fieldMountBots(true)
     , fieldMountSpeed(30)
     , fieldMountMaxLevel(39)
+    , questsEnabled(true)
+    , questsPerDay(3)
+    , questResetHour(6)
+    , questDailyRenown(150)
+    , questWeeklyRenown(500)
+    , questDailyXPPercent(15)
+    , questWeeklyXPPercent(50)
+    , questDailyBagChance(15)
     , pointsHonorableKill(10)
     , pointsKillingBlow(5)
     , pointsWorldKill(10)
@@ -140,6 +148,15 @@ namespace cmangos_module
         fieldMountBots = config.GetBoolDefault("Renown.FieldMount.Bots", true);
         fieldMountSpeed = config.GetIntDefault("Renown.FieldMount.Speed", 30);
         fieldMountMaxLevel = config.GetIntDefault("Renown.FieldMount.MaxLevel", 39);
+
+        questsEnabled = config.GetBoolDefault("Renown.Quests.Enable", true);
+        questsPerDay = config.GetIntDefault("Renown.Quests.PerDay", 3);
+        questResetHour = config.GetIntDefault("Renown.Quests.ResetHour", 6) % 24;
+        questDailyRenown = config.GetIntDefault("Renown.Quests.DailyRenown", 150);
+        questWeeklyRenown = config.GetIntDefault("Renown.Quests.WeeklyRenown", 500);
+        questDailyXPPercent = config.GetIntDefault("Renown.Quests.DailyXPPercent", 15);
+        questWeeklyXPPercent = config.GetIntDefault("Renown.Quests.WeeklyXPPercent", 50);
+        questDailyBagChance = config.GetIntDefault("Renown.Quests.DailyBagChance", 15);
 
         pointsHonorableKill = config.GetIntDefault("Renown.Points.HonorableKill", 10);
         pointsKillingBlow = config.GetIntDefault("Renown.Points.KillingBlow", 5);

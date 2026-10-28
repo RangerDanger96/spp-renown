@@ -26,6 +26,10 @@ namespace cmangos_module
         void OnUpdate(uint32 elapsed) override;
         void OnKill(Unit* unit, Unit* victim) override;
 
+        // Quest hooks (war board)
+        void OnGetQuestXP(Player* player, const Quest* quest, uint32& xp) override;
+        void OnRewardQuest(Player* player, const Quest* quest) override;
+
         // Player hooks
         void OnLoadFromDB(Player* player) override;
         void OnSaveToDB(Player* player) override;
@@ -118,6 +122,17 @@ namespace cmangos_module
         void GiveItem(Player* player, uint32 itemId, const std::string& subject);
         uint32 GetRenownTier(Player* player) const;   // highest unlocked reward tier (0 = none)
 
+        // ---- War board quests
+        static bool IsFrontQuest(uint32 questId, bool& weekly);
+        uint32 QuestDayKey() const;
+        void QuestsInit();
+        void QuestsUpdate(uint32 diff);
+        void QuestsNewDay();
+        void QuestsApplyRotation(uint32 mask);
+        void QuestsLoad(Player* player);
+        void QuestsSave(Player* player);
+        void QuestCredit(Player* player, uint32 creditEntry);
+
         // ---- RvR lake (Barrens Front, tier 1)
         struct RvRObjective
         {
@@ -187,6 +202,11 @@ namespace cmangos_module
         time_t m_rvrLockUntil = 0;
         bool m_rvrDirty = true;
         bool m_rvrResetRequested = false;
+
+        bool m_questsReady = false;
+        uint32 m_questDay = 0;
+        uint32 m_questMask = 0;
+        uint32 m_questTimer = 0;
         std::mutex m_rvrReturnMutex;
         mutable std::mutex m_bolsterMutex;
     };

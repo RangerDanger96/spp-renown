@@ -84,6 +84,15 @@
 #    Renown.FieldMount.Speed    Default 30
 #    Renown.FieldMount.MaxLevel Default 39
 #
+#    Renown.Quests.Enable
+#        War boards at the Crossroads and Northwatch Hold: PerDay of 8 daily quests (rotating every day at
+#        ResetHour, local server time) plus a weekly quest. Rewards: Renown, XP worth a percentage of the
+#        character's current level, and a chance at a loot bag (the weekly always gives a Purple bag).
+#        Default: 1
+#
+#    Renown.Quests.PerDay (3)  ResetHour (6)  DailyRenown (150)  WeeklyRenown (500)
+#    Renown.Quests.DailyXPPercent (15)  WeeklyXPPercent (50)  DailyBagChance (15)
+#
 #    Renown.Points.*
 #        Renown awarded per event
 #
@@ -150,6 +159,15 @@ Renown.FieldMount.Enable = 1
 Renown.FieldMount.Bots = 1
 Renown.FieldMount.Speed = 30
 Renown.FieldMount.MaxLevel = 39
+
+Renown.Quests.Enable = 1
+Renown.Quests.PerDay = 3
+Renown.Quests.ResetHour = 6
+Renown.Quests.DailyRenown = 150
+Renown.Quests.WeeklyRenown = 500
+Renown.Quests.DailyXPPercent = 15
+Renown.Quests.WeeklyXPPercent = 50
+Renown.Quests.DailyBagChance = 15
 
 Renown.Points.HonorableKill = 10
 Renown.Points.KillingBlow = 5

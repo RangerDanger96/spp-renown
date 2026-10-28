@@ -107,3 +107,126 @@ w(",\n".join(cr)+";")
 w("INSERT INTO game_event_creature (guid,event) VALUES "+",".join(cev)+";")
 open('/root/rvr/zz_rvr.sql','w',newline='\r\n').write("\n".join(L)+"\n")
 print(len(gos),'banners',len(cr),'creatures')
+
+# ======================================================================= war board quests
+Q=[]; q=Q.append
+EVQ=1120
+q("")
+q("-- ============================================================")
+q("-- Barrens Front war boards: 8 rotating daily quests (3 a day) and a weekly quest per faction")
+q("-- Rotation events 1120-1127 (started by the Renown module), conditions 59120-59127, quests 90101-90119,")
+q("-- credit markers 190820-190829, board 190803. Daily = QuestFlags 0x1000 (core patch).")
+q("-- ============================================================")
+q("DELETE FROM game_event WHERE entry BETWEEN 1120 AND 1127;")
+q("DELETE FROM conditions WHERE condition_entry BETWEEN 59120 AND 59127;")
+q("DELETE FROM creature_template WHERE Entry BETWEEN 190820 AND 190829;")
+q("DELETE FROM gameobject_template WHERE entry=190803;")
+q("DELETE FROM gameobject WHERE guid BETWEEN 5400100 AND 5400109;")
+q("DELETE FROM quest_template WHERE entry BETWEEN 90101 AND 90119;")
+q("DELETE FROM gameobject_questrelation WHERE quest BETWEEN 90101 AND 90119;")
+q("DELETE FROM gameobject_involvedrelation WHERE quest BETWEEN 90101 AND 90119;")
+q("INSERT INTO game_event (entry,schedule_type,occurence,length,holiday,linkedTo,description) VALUES")
+q(",\n".join(f"({EVQ+i},0,525600,1,0,0,'Barrens Front war board: daily order {i+1}')" for i in range(8))+";")
+q("INSERT INTO conditions (condition_entry,type,value1,value2,value3,value4,flags,comments) VALUES")
+q(",\n".join(f"({59120+i},12,{EVQ+i},0,0,0,0,'Renown: war board daily order {i+1} is posted')" for i in range(8))+";")
+q("")
+q("-- Credit markers (never spawned; the Renown module credits them to the quests)")
+credits=[(190820,'Objective captured'),(190821,'Objective defended'),(190822,'Enemy soldier defeated'),(190823,'Healing assist'),
+         (190824,'Killing spree ended'),(190825,'Kolkar Watch scouted'),(190826,'Stagnant Oasis scouted'),(190827,'Raptor Grounds scouted'),
+         (190828,'Enemy defeated at the Oasis'),(190829,'Barrens Front won')]
+for e,n in credits:
+    q("DROP TEMPORARY TABLE IF EXISTS tmp_ct;")
+    q("CREATE TEMPORARY TABLE tmp_ct SELECT * FROM creature_template WHERE Entry=190810;")
+    q(f"UPDATE tmp_ct SET Entry={e}, Name='{n}', SubName='Barrens Front';")
+    q("INSERT INTO creature_template SELECT * FROM tmp_ct;")
+q("DROP TEMPORARY TABLE IF EXISTS tmp_ct;")
+q("")
+q("-- War Board (clone of the Wanted Board quest giver)")
+q("DROP TEMPORARY TABLE IF EXISTS tmp_gt;")
+q("CREATE TEMPORARY TABLE tmp_gt SELECT * FROM gameobject_template WHERE entry=2713;")
+q("UPDATE tmp_gt SET entry=190803, name='Barrens Front War Board', size=1.2;")
+q("INSERT INTO gameobject_template SELECT * FROM tmp_gt;")
+q("DROP TEMPORARY TABLE IF EXISTS tmp_gt;")
+boards=[(5400100,-462.0,-2617.0,(-450.0,-2630.0)),(5400101,-2086.0,-3628.0,(-2093.0,-3639.0))]
+rows=[]
+for g,x,y,(fx,fy) in boards:
+    o=math.atan2(fy-y,fx-x)%(2*math.pi)
+    z=H(x,y)
+    if g==5400101: z=max(z,61.8)
+    rows.append(f"({g},190803,1,1,{x:.3f},{y:.3f},{z+0.05:.3f},{o:.4f},0,0,{math.sin(o/2):.6f},{math.cos(o/2):.6f},120,120)")
+q("INSERT INTO gameobject (guid,id,map,spawnMask,position_x,position_y,position_z,orientation,rotation0,rotation1,rotation2,rotation3,spawntimesecsmin,spawntimesecsmax) VALUES")
+q(",\n".join(rows)+";")
+q("")
+
+def esc(t): return t.replace("'","''")
+HORDE,ALLI=178,77
+# (index, horde title, alliance title, objectives text, [(reqId,count,objtext)], details_h, details_a, reward text)
+DAILIES=[
+ (0,"Seize the Front","Seize the Front","Capture an objective on the Barrens Front.",
+  [(190820,1,"Objective captured")],
+  "The front is a line on a map until somebody plants a banner on it, $N. Take Kolkar Watch, the Stagnant Oasis or the Raptor Grounds for the Horde.",
+  "Theramore does not hold ground by wishing for it, $N. Take an objective on the front: the Raptor Grounds, the Stagnant Oasis or Kolkar Watch.",
+  "A banner planted is a promise kept. Well done."),
+ (1,"Hold the Line","Hold the Line","Defeat 5 enemies near an objective your side holds.",
+  [(190821,5,"Objective defended")],
+  "Taking ground is easy. Keeping it is what wins wars. Stand guard at an objective we hold and cut down any Alliance dog who tries to take it.",
+  "Every banner we raise draws the Horde like flies. Stand watch at an objective we hold and drive them off.",
+  "The line held. That is all I ask."),
+ (2,"Blood and Thunder","For Theramore!","Defeat 10 enemy players on the Barrens Front.",
+  [(190822,10,"Enemy soldier defeated")],
+  "The Alliance has marched an army into our Barrens. Remind them why orcs are feared. Ten of them, $N, on the front.",
+  "The Horde has been raiding our caravans from the Crossroads for too long. Meet them on the front and bring down ten of their soldiers.",
+  "Lok'tar! The front is quieter for it."),
+ (3,"Field Medic","Field Medic","Earn 10 healing assists on the Barrens Front.",
+  [(190823,10,"Healing assist")],
+  "Warriors win battles, but healers win wars. Keep our fighters standing while they cut down the enemy.",
+  "Our soldiers are brave, but brave soldiers bleed. Keep them on their feet while they fight.",
+  "Many owe you their lives today, though few of them will say it."),
+ (4,"Bounty Hunter","Break Their Spirit","End an enemy's killing spree on the Barrens Front.",
+  [(190824,1,"Killing spree ended")],
+  "Some Alliance hero is always strutting about the front with blood on his blade. Find one on a killing spree and end it.",
+  "There is always one of them on a rampage, howling over a pile of our dead. Find a Horde soldier on a killing spree and put an end to it.",
+  "The braggart is silenced. Good."),
+ (5,"Scout the Front","Scout the Front","Visit Kolkar Watch, the Stagnant Oasis and the Raptor Grounds.",
+  [(190825,1,"Kolkar Watch scouted"),(190826,1,"Stagnant Oasis scouted"),(190827,1,"Raptor Grounds scouted")],
+  "I need fresh eyes on the whole front. Ride past Kolkar Watch, the Stagnant Oasis and the Raptor Grounds and tell me what you see.",
+  "Our maps are a day old and a day is a long time in war. Scout Kolkar Watch, the Stagnant Oasis and the Raptor Grounds.",
+  "Good. Now I know where to send the others."),
+ (6,"Thin the Vanguard","Break the Vanguard","",
+  None,
+  "Theramore has sent its Vanguard to guard the objectives they hold. Kill five of them.",
+  "The Warsong have posted their Vanguard at every objective they hold. Kill five of them.",
+  "Their Vanguard will think twice before standing guard."),
+ (7,"Blood in the Oasis","Waters of War","Defeat 5 enemies at the Stagnant Oasis.",
+  [(190828,5,"Enemy defeated at the Oasis")],
+  "Whoever holds the Stagnant Oasis holds the Barrens. Make its waters run red. Five kills at the Oasis.",
+  "The Stagnant Oasis is the heart of the front. Fight there and bring down five of the enemy.",
+  "The Oasis remembers who fought for it."),
+]
+qrows=[]
+def quest(entry,races,flags,cond,title,obj,reqs,details,offer,weekly=False):
+    reqid=[0,0,0,0]; reqcnt=[0,0,0,0]; otext=['','','','']
+    for k,(rid,cnt,ot) in enumerate(reqs):
+        reqid[k]=rid; reqcnt[k]=cnt; otext[k]=ot
+    details=details+("$B$BThese orders are posted every week." if weekly else "$B$BThe war board's orders change daily.")
+    cols=("entry,Method,ZoneOrSort,MinLevel,MaxLevel,QuestLevel,Type,RequiredRaces,RequiredCondition,QuestFlags,SpecialFlags,"
+          "Title,Details,Objectives,OfferRewardText,RequestItemsText,EndText,ObjectiveText1,ObjectiveText2,ObjectiveText3,ObjectiveText4,"
+          "ReqCreatureOrGOId1,ReqCreatureOrGOId2,ReqCreatureOrGOId3,ReqCreatureOrGOId4,"
+          "ReqCreatureOrGOCount1,ReqCreatureOrGOCount2,ReqCreatureOrGOCount3,ReqCreatureOrGOCount4,RewOrReqMoney,RewMoneyMaxLevel")
+    vals=[entry,2,17,1,0,10,41,races,cond,flags,1,
+          f"'{esc(title)}'",f"'{esc(details)}'",f"'{esc(obj)}'",f"'{esc(offer)}'","'Report back when it is done, $N.'","''"]+[f"'{esc(t)}'" for t in otext]+reqid+reqcnt+[5000 if weekly else 2500,0]
+    qrows.append(f"INSERT INTO quest_template ({cols}) VALUES ("+",".join(str(v) for v in vals)+");")
+for idx,th,ta,obj,reqs,dh,da,offer in DAILIES:
+    for base,races,title,details,enemyVanguard,objtxt in [(90101,HORDE,th,dh,190810,"Slay 5 Theramore Vanguards."),(90111,ALLI,ta,da,190811,"Slay 5 Crossroads Vanguards.")]:
+        r=reqs if reqs else [(enemyVanguard,5,'')]
+        o=obj if obj else objtxt
+        quest(base+idx,races,0x1000|0x8,59120+idx,title,o,r,details,offer)
+for entry,races,title,details in [(90109,HORDE,"Victory on the Barrens Front","Hold the whole front, break their siege line and kill their field commander. Do that, $N, and the Barrens belong to the Horde for a time."),
+                                  (90119,ALLI,"Victory on the Barrens Front","Take the whole front, open the siege and bring down the Crossroads Warlord. Win the Barrens Front for the Alliance.")]:
+    quest(entry,races,0x8000|0x8,0,title,"Help your side win the Barrens Front.",[(190829,1,"Barrens Front won")],details,"A victory worth singing about. Take this, you have earned it.",weekly=True)
+Q.extend(qrows)
+q("INSERT INTO gameobject_questrelation (id,quest) VALUES "+",".join(f"(190803,{e})" for e in list(range(90101,90110))+list(range(90111,90120)))+";")
+q("INSERT INTO gameobject_involvedrelation (id,quest) VALUES "+",".join(f"(190803,{e})" for e in list(range(90101,90110))+list(range(90111,90120)))+";")
+with open('/root/rvr/zz_rvr.sql','a',newline='\r\n') as f:
+    f.write("\n".join(Q)+"\n")
+print(len(qrows),'quests')

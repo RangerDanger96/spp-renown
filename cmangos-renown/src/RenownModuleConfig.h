@@ -65,6 +65,15 @@ namespace cmangos_module
         uint32 fieldMountSpeed;
         uint32 fieldMountMaxLevel;
 
+        bool questsEnabled;
+        uint32 questsPerDay;
+        uint32 questResetHour;
+        uint32 questDailyRenown;
+        uint32 questWeeklyRenown;
+        uint32 questDailyXPPercent;
+        uint32 questWeeklyXPPercent;
+        uint32 questDailyBagChance;
+
         uint32 pointsHonorableKill;
         uint32 pointsKillingBlow;
         uint32 pointsWorldKill;
