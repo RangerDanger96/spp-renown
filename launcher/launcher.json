@@ -2,7 +2,7 @@
   "serverName": "Renown Realm",
   "address": "10.229.14.74",
   "port": 3724,
-  "zerotierNetwork": "",
+  "zerotierNetwork": "08752e18b1bf4c51",
   "cacheVersion": 1,
   "clientFilesUrl": "https://github.com/RangerDanger96/spp-renown/releases/download/client-latest/client-files.zip",
   "clientVersionUrl": "https://github.com/RangerDanger96/spp-renown/releases/download/client-latest/client-version.txt",
