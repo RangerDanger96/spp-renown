@@ -47,6 +47,17 @@ namespace cmangos_module
         uint32 pointsHealAssist;
         uint32 assistWindow;
 
+        bool rvrEnabled;
+        uint32 rvrMaxLevel;
+        uint32 rvrCaptureTime;
+        uint32 rvrCaptureRadius;
+        uint32 rvrCapturePoints;
+        uint32 rvrTickPoints;
+        uint32 rvrDefendPoints;
+        uint32 rvrSiegeHold;
+        uint32 rvrLockMinutes;
+        uint32 rvrBotsPerSide;
+
         uint32 pointsHonorableKill;
         uint32 pointsKillingBlow;
         uint32 pointsWorldKill;

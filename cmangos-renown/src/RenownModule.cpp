@@ -59,6 +59,7 @@ namespace cmangos_module
         }
 
         LoadVendorCosts();
+        RvRInit();
 
         sLog.outString("Renown module initialized (max rank %u, %u items cost Renown)", GetConfig()->maxRank, (uint32)m_vendorCosts.size());
     }
@@ -372,7 +373,7 @@ namespace cmangos_module
     {
         // Keeps the bolster if the core rebuilds stats while inside the battleground (e.g. .reset stats)
         const uint32 target = GetBolsterLevel(player);
-        if (target && player->InBattleGround())
+        if (target && (player->InBattleGround() || RvRIsMember(player->GetObjectGuid().GetCounter())))
         {
             sObjectMgr.GetPlayerLevelInfo(player->getRace(), player->getClass(), target, &info);
         }
@@ -381,7 +382,7 @@ namespace cmangos_module
     void RenownModule::OnGetPlayerClassLevelInfo(Player* player, PlayerClassLevelInfo& info)
     {
         const uint32 target = GetBolsterLevel(player);
-        if (target && player->InBattleGround())
+        if (target && (player->InBattleGround() || RvRIsMember(player->GetObjectGuid().GetCounter())))
         {
             sObjectMgr.GetPlayerClassLevelInfo(player->getClass(), target, &info);
         }
@@ -968,6 +969,20 @@ namespace cmangos_module
             }
         }
 
+        // RvR lake: killing an enemy near an objective your side holds
+        if (config->rvrDefendPoints && RvRIsMember(player->GetObjectGuid().GetCounter()))
+        {
+            for (const RvRObjective& o : m_rvrObjectives)
+            {
+                const float dx = victim->GetPositionX() - o.x, dy = victim->GetPositionY() - o.y;
+                if (o.owner == player->GetTeam() && dx * dx + dy * dy <= 40.0f * 40.0f)
+                {
+                    AddRenown(player, config->rvrDefendPoints);
+                    break;
+                }
+            }
+        }
+
         // Healing assists: healers who kept any of the attackers alive
         if (config->pointsHealAssist)
         {
@@ -1089,6 +1104,11 @@ namespace cmangos_module
             if (player->InBattleGround())
             {
                 data.bgEarned += gained;
+            }
+
+            if (RvRIsMember(playerId))
+            {
+                data.lakeEarned += gained;
             }
             oldRank = data.rank;
             newRank = GetConfig()->GetRankForPoints(data.points);
@@ -1298,6 +1318,8 @@ namespace cmangos_module
             { "add", std::bind(&RenownModule::HandleAddCommand, this, std::placeholders::_1, std::placeholders::_2), SEC_GAMEMASTER },
             { "set", std::bind(&RenownModule::HandleSetCommand, this, std::placeholders::_1, std::placeholders::_2), SEC_GAMEMASTER },
             { "give", std::bind(&RenownModule::HandleGiveCommand, this, std::placeholders::_1, std::placeholders::_2), SEC_GAMEMASTER },
+            { "queue", std::bind(&RenownModule::HandleQueueCommand, this, std::placeholders::_1, std::placeholders::_2), SEC_PLAYER },
+            { "rvr", std::bind(&RenownModule::HandleRvRCommand, this, std::placeholders::_1, std::placeholders::_2), SEC_PLAYER },
             { "reload", std::bind(&RenownModule::HandleReloadCommand, this, std::placeholders::_1, std::placeholders::_2), SEC_ADMINISTRATOR }
         };
 

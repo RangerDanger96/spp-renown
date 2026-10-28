@@ -7,6 +7,9 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
+#include <vector>
+#include "Entities/Object.h"
 
 namespace cmangos_module
 {
@@ -20,6 +23,8 @@ namespace cmangos_module
 
         // Module hooks
         void OnInitialize() override;
+        void OnUpdate(uint32 elapsed) override;
+        void OnKill(Unit* unit, Unit* victim) override;
 
         // Player hooks
         void OnLoadFromDB(Player* player) override;
@@ -62,6 +67,7 @@ namespace cmangos_module
             time_t lastVictimTime = 0;
             uint32 bgEarned = 0;    // renown earned in the current battleground (loot bag ranking)
             uint32 streak = 0;      // player kills since the last death
+            uint32 lakeEarned = 0;  // renown earned in the RvR lake since the last lock (loot bag ranking)
         };
 
         // Adds (scaled) renown points to a player and handles rank ups
@@ -92,6 +98,8 @@ namespace cmangos_module
         bool HandleSetCommand(WorldSession* session, const std::string& args);
         bool HandleSyncCommand(WorldSession* session, const std::string& args);
         bool HandleGiveCommand(WorldSession* session, const std::string& args);
+        bool HandleQueueCommand(WorldSession* session, const std::string& args);
+        bool HandleRvRCommand(WorldSession* session, const std::string& args);
         bool HandleReloadCommand(WorldSession* session, const std::string& args);
 
         void LoadVendorCosts();
@@ -103,6 +111,35 @@ namespace cmangos_module
         uint32 PickRewardItem(Player* player) const;
         void GiveItem(Player* player, uint32 itemId, const std::string& subject);
         uint32 GetRenownTier(Player* player) const;   // highest unlocked reward tier (0 = none)
+
+        // ---- RvR lake (Barrens Front, tier 1)
+        struct RvRObjective
+        {
+            const char* name;
+            float x, y, z;
+            bool tower;
+            uint32 owner = 0;         // 0 = neutral, else ALLIANCE / HORDE
+            uint32 capTeam = 0;
+            uint32 progress = 0;      // ms of uncontested capture
+        };
+
+        void RvRInit();
+        void RvRUpdate(uint32 diff);
+        void RvRSetOwner(size_t index, uint32 team, bool force = false);
+        void RvRReset();
+        void RvRLock(uint32 team);
+        void RvRStartSiege(uint32 team);
+        void RvRStopSiege();
+        void RvRAnnounce(const std::string& text, bool worldwide = false) const;
+        void RvRSendStatus(Player* player) const;
+        void RvRReinforce(const std::vector<Player*>& players);
+        void RvREnterLake(Player* player);
+        void RvRLeaveLake(Player* player);
+        bool RvRInLakeArea(const Player* player) const;
+        bool RvRIsMember(uint32 playerId) const;
+        void RvRFrontPoint(uint32 team, float& x, float& y, float& z) const;
+        uint32 RvROwnedBy(uint32 team) const;
+        void RvRAwardBags(uint32 winner);
 
         // Streaks / assists
         void Announce(Player* source, const std::string& text) const;
@@ -127,6 +164,23 @@ namespace cmangos_module
         mutable std::mutex m_vendorMutex;
 
         std::unordered_map<uint32, uint32> m_bolster;   // player guid -> bolstered level
+
+        std::vector<RvRObjective> m_rvrObjectives;
+        std::unordered_set<uint32> m_rvrMembers;         // players inside the lake
+        std::unordered_set<uint32> m_rvrChickens;        // over-level players turned into chickens
+        std::unordered_map<uint32, WorldLocation> m_rvrReturn;
+        uint32 m_rvrTimer = 0;
+        uint32 m_rvrTickTimer = 0;
+        uint32 m_rvrStatusTimer = 0;
+        uint32 m_rvrBotTimer = 0;
+        uint32 m_rvrHoldTeam = 0;
+        uint32 m_rvrHoldTime = 0;
+        uint32 m_rvrSiegeTeam = 0;                       // attacking team during a siege
+        uint32 m_rvrLockTeam = 0;
+        time_t m_rvrLockUntil = 0;
+        bool m_rvrDirty = true;
+        bool m_rvrResetRequested = false;
+        std::mutex m_rvrReturnMutex;
         mutable std::mutex m_bolsterMutex;
     };
 }

@@ -58,6 +58,24 @@
 #        Renown for each healer who healed one of the attackers within Renown.AssistWindow seconds before an
 #        enemy player died.
 #
+#    Renown.RvR.Enable
+#        The Barrens Front: a tier 1 RvR lake between the Crossroads (Horde) and Northwatch Hold (Alliance).
+#        Three objectives (Kolkar Watch, Stagnant Oasis, Raptor Grounds); hold all three for SiegeHold seconds to
+#        open a siege on the enemy commander; killing the commander locks the lake for LockMinutes.
+#        Inside the lake players are bolstered to MaxLevel and anyone above MaxLevel is turned into a chicken.
+#        Commands: .renown rvr join | leave | status    .renown queue wsg | ab | av  (queue from anywhere)
+#        Default: 1
+#
+#    Renown.RvR.MaxLevel        Tier cap (default 19)
+#    Renown.RvR.CaptureTime     Seconds of uncontested presence to capture an objective (default 20)
+#    Renown.RvR.CaptureRadius   Yards (default 25)
+#    Renown.RvR.CapturePoints   Renown for each player who helps capture (default 40)
+#    Renown.RvR.TickPoints      Renown per owned objective every minute to each player of that side in the lake (default 5)
+#    Renown.RvR.DefendPoints    Extra Renown for killing an enemy near an objective your side holds (default 10)
+#    Renown.RvR.SiegeHold       Seconds a side must hold all objectives before the siege opens (default 120)
+#    Renown.RvR.LockMinutes     How long the lake stays locked after a successful siege (default 20)
+#    Renown.RvR.BotsPerSide     Free level 10-19 bots kept fighting in the lake per side (default 8, 0 = off)
+#
 #    Renown.Points.*
 #        Renown awarded per event
 #
@@ -106,6 +124,17 @@ Renown.Bounty.MinStreak = 5
 Renown.Bounty.PerKill = 10
 Renown.Bounty.Max = 250
 Renown.AssistWindow = 15
+
+Renown.RvR.Enable = 1
+Renown.RvR.MaxLevel = 19
+Renown.RvR.CaptureTime = 20
+Renown.RvR.CaptureRadius = 25
+Renown.RvR.CapturePoints = 40
+Renown.RvR.TickPoints = 5
+Renown.RvR.DefendPoints = 10
+Renown.RvR.SiegeHold = 120
+Renown.RvR.LockMinutes = 20
+Renown.RvR.BotsPerSide = 8
 
 Renown.Points.HonorableKill = 10
 Renown.Points.KillingBlow = 5

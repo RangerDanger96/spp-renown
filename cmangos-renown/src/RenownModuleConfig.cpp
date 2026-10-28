@@ -57,6 +57,16 @@ namespace cmangos_module
     , bountyMax(250)
     , pointsHealAssist(5)
     , assistWindow(15)
+    , rvrEnabled(true)
+    , rvrMaxLevel(19)
+    , rvrCaptureTime(20)
+    , rvrCaptureRadius(25)
+    , rvrCapturePoints(40)
+    , rvrTickPoints(5)
+    , rvrDefendPoints(10)
+    , rvrSiegeHold(120)
+    , rvrLockMinutes(20)
+    , rvrBotsPerSide(8)
     , pointsHonorableKill(10)
     , pointsKillingBlow(5)
     , pointsWorldKill(10)
@@ -106,6 +116,17 @@ namespace cmangos_module
 
         pointsHealAssist = config.GetIntDefault("Renown.Points.HealAssist", 5);
         assistWindow = config.GetIntDefault("Renown.AssistWindow", 15);
+
+        rvrEnabled = config.GetBoolDefault("Renown.RvR.Enable", true);
+        rvrMaxLevel = config.GetIntDefault("Renown.RvR.MaxLevel", 19);
+        rvrCaptureTime = config.GetIntDefault("Renown.RvR.CaptureTime", 20);
+        rvrCaptureRadius = config.GetIntDefault("Renown.RvR.CaptureRadius", 25);
+        rvrCapturePoints = config.GetIntDefault("Renown.RvR.CapturePoints", 40);
+        rvrTickPoints = config.GetIntDefault("Renown.RvR.TickPoints", 5);
+        rvrDefendPoints = config.GetIntDefault("Renown.RvR.DefendPoints", 10);
+        rvrSiegeHold = config.GetIntDefault("Renown.RvR.SiegeHold", 120);
+        rvrLockMinutes = config.GetIntDefault("Renown.RvR.LockMinutes", 20);
+        rvrBotsPerSide = config.GetIntDefault("Renown.RvR.BotsPerSide", 8);
 
         pointsHonorableKill = config.GetIntDefault("Renown.Points.HonorableKill", 10);
         pointsKillingBlow = config.GetIntDefault("Renown.Points.KillingBlow", 5);

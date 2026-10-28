@@ -17,6 +17,32 @@ index a80bbf7..d234d40 100644
  
  enum ScoreType
  {
+diff --git a/src/game/BattleGround/BattleGroundHandler.cpp b/src/game/BattleGround/BattleGroundHandler.cpp
+index 15f26b5..2bdc8c0 100644
+--- a/src/game/BattleGround/BattleGroundHandler.cpp
++++ b/src/game/BattleGround/BattleGroundHandler.cpp
+@@ -123,12 +123,16 @@ void WorldSession::HandleBattlemasterJoinOpcode(WorldPacket& recv_data)
+     if (_player->InBattleGround())
+         return;
+ 
+-    Creature* unit = GetPlayer()->GetMap()->GetCreature(guid);
+-    if (!unit)
+-        return;
++    // SPP Renown: the player's own guid means a remote queue request (queue from anywhere)
++    if (guid != _player->GetObjectGuid())
++    {
++        Creature* unit = GetPlayer()->GetMap()->GetCreature(guid);
++        if (!unit)
++            return;
+ 
+-    if (!unit->isBattleMaster())                            // it's not battlemaster
+-        return;
++        if (!unit->isBattleMaster())                        // it's not battlemaster
++            return;
++    }
+ 
+     // get bg instance or bg template if instance not found
+     BattleGround* bg = nullptr;
 diff --git a/src/game/BattleGround/BattleGroundMgr.cpp b/src/game/BattleGround/BattleGroundMgr.cpp
 index 48c1ab6..b51ae14 100644
 --- a/src/game/BattleGround/BattleGroundMgr.cpp

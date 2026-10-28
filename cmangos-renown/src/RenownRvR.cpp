@@ -1,0 +1,947 @@
+// The Barrens Front: a Warhammer style tier 1 RvR lake for the Renown module.
+//
+// Horde stage at the Crossroads, the Alliance at Northwatch Hold. Three battlefield objectives lie between
+// them: Kolkar Watch (Horde side), the Stagnant Oasis (center, needs both towers) and the Raptor Grounds
+// (Alliance side). Holding all three for a while opens a siege on the enemy field commander; killing the
+// commander locks the lake for the winners, hands out loot bags and resets it after a cooldown.
+//
+// Banners, objective guards and the commanders are world database spawns linked to server-side game events
+// (zz_rvr.sql), so the core takes care of spawning them in loaded and unloaded grids.
+
+#include "RenownModule.h"
+
+#include "Chat/Chat.h"
+#include "Entities/Creature.h"
+#include "Entities/Player.h"
+#include "GameEvents/GameEventMgr.h"
+#include "Globals/ObjectAccessor.h"
+#include "Globals/ObjectMgr.h"
+#include "Groups/Group.h"
+#include "Log/Log.h"
+#include "Maps/Map.h"
+#include "Server/Opcodes.h"
+#include "Server/WorldPacket.h"
+#include "Server/WorldSession.h"
+#include "World/World.h"
+
+#include <algorithm>
+#include <cmath>
+#include <sstream>
+
+namespace cmangos_module
+{
+    namespace
+    {
+        const uint32 RVR_MAP = 1;
+        const uint16 RVR_EVENT_BASE = 1100;            // + objective * 3 + state (0 neutral, 1 alliance, 2 horde)
+        const uint16 RVR_EVENT_SIEGE_NORTHWATCH = 1110; // alliance commander out (horde attacks)
+        const uint16 RVR_EVENT_SIEGE_CROSSROADS = 1111; // horde commander out (alliance attacks)
+        const uint32 RVR_COMMANDER_ALLIANCE = 190812;
+        const uint32 RVR_COMMANDER_HORDE = 190813;
+        const uint32 RVR_CHICKEN_DISPLAY = 304;
+        const float RVR_LAKE_RADIUS = 200.0f;
+
+        struct Point { float x, y, z; };
+        const Point RVR_HORDE_COMMAND    = { -680.0f, -2740.0f, 92.5f };
+        const Point RVR_ALLIANCE_COMMAND = { -1965.0f, -3395.0f, 56.4f };
+        const Point RVR_HORDE_ARRIVAL    = { -450.0f, -2630.0f, 96.0f };   // the Crossroads
+        const Point RVR_ALLIANCE_ARRIVAL = { -2093.0f, -3639.0f, 62.0f };  // Northwatch Hold
+        const float RVR_HORDE_ARRIVAL_O = 3.8f;
+        const float RVR_ALLIANCE_ARRIVAL_O = 0.8f;
+
+        uint32 TeamState(uint32 team) { return team == ALLIANCE ? 1 : (team == HORDE ? 2 : 0); }
+        const char* TeamName(uint32 team) { return team == ALLIANCE ? "|cff3399ffAlliance|r" : (team == HORDE ? "|cffff3333Horde|r" : "nobody"); }
+        uint32 Enemy(uint32 team) { return team == ALLIANCE ? HORDE : ALLIANCE; }
+
+        float DistToSegment(float px, float py, float ax, float ay, float bx, float by)
+        {
+            const float dx = bx - ax, dy = by - ay;
+            const float len = dx * dx + dy * dy;
+            float t = len > 0.0f ? ((px - ax) * dx + (py - ay) * dy) / len : 0.0f;
+            t = std::max(0.0f, std::min(1.0f, t));
+            const float cx = ax + t * dx, cy = ay + t * dy;
+            return std::sqrt((px - cx) * (px - cx) + (py - cy) * (py - cy));
+        }
+
+        void SendAddon(Player* player, const std::string& message)
+        {
+            if (!player || !player->GetSession())
+            {
+                return;
+            }
+
+            WorldPacket packet;
+            ChatHandler::BuildChatPacket(packet, CHAT_MSG_PARTY, message.c_str(), LANG_ADDON, CHAT_TAG_NONE, player->GetObjectGuid(), player->GetName());
+            player->GetSession()->SendPacket(packet);
+        }
+    }
+
+    void RenownModule::RvRInit()
+    {
+        m_rvrObjectives.clear();
+        RvRObjective kolkar;  kolkar.name = "Kolkar Watch";    kolkar.x = -849.0f;  kolkar.y = -2858.0f; kolkar.z = 92.0f; kolkar.tower = true;
+        RvRObjective oasis;   oasis.name = "Stagnant Oasis";   oasis.x = -1255.0f;  oasis.y = -3150.0f;  oasis.z = 91.8f;  oasis.tower = false;
+        RvRObjective raptor;  raptor.name = "Raptor Grounds";  raptor.x = -1790.0f; raptor.y = -3280.0f; raptor.z = 93.2f; raptor.tower = true;
+        m_rvrObjectives.push_back(kolkar);
+        m_rvrObjectives.push_back(oasis);
+        m_rvrObjectives.push_back(raptor);
+
+        if (!GetConfig()->rvrEnabled)
+        {
+            return;
+        }
+
+        std::vector<uint16> events = { RVR_EVENT_SIEGE_NORTHWATCH, RVR_EVENT_SIEGE_CROSSROADS };
+        for (uint16 e = RVR_EVENT_BASE; e < RVR_EVENT_BASE + 9; ++e)
+        {
+            events.push_back(e);
+        }
+
+        for (uint16 e : events)
+        {
+            if (!sGameEventMgr.IsValidEvent(e))
+            {
+                sLog.outError("Renown: RvR game event %u is missing (zz_rvr.sql not applied?), the Barrens Front is disabled", e);
+                m_rvrObjectives.clear();
+                return;
+            }
+        }
+
+        RvRReset();
+        sLog.outString("Renown: the Barrens Front RvR lake is open");
+    }
+
+    // ------------------------------------------------------------------ state changes
+    void RenownModule::RvRSetOwner(size_t index, uint32 team, bool force)
+    {
+        RvRObjective& objective = m_rvrObjectives[index];
+        if (objective.owner == team && !force)
+        {
+            return;
+        }
+
+        objective.owner = team;
+        objective.capTeam = 0;
+        objective.progress = 0;
+
+        const uint16 base = RVR_EVENT_BASE + uint16(index * 3);
+        const uint32 state = TeamState(team);
+        for (uint32 s = 0; s < 3; ++s)
+        {
+            if (s != state && sGameEventMgr.IsActiveEvent(base + s))
+            {
+                sGameEventMgr.StopEvent(base + s, true);
+            }
+        }
+
+        if (!sGameEventMgr.IsActiveEvent(base + state))
+        {
+            sGameEventMgr.StartEvent(base + state, true);
+        }
+
+        m_rvrDirty = true;
+    }
+
+    void RenownModule::RvRReset()
+    {
+        RvRStopSiege();
+        m_rvrLockTeam = 0;
+        m_rvrLockUntil = 0;
+        m_rvrHoldTeam = 0;
+        m_rvrHoldTime = 0;
+        for (size_t i = 0; i < m_rvrObjectives.size(); ++i)
+        {
+            RvRSetOwner(i, 0, true);
+        }
+
+        std::lock_guard<std::mutex> lock(m_dataMutex);
+        for (auto& entry : m_data)
+        {
+            entry.second.lakeEarned = 0;
+        }
+    }
+
+    void RenownModule::RvRStartSiege(uint32 team)
+    {
+        if (m_rvrSiegeTeam == team)
+        {
+            return;
+        }
+
+        RvRStopSiege();
+        m_rvrSiegeTeam = team;
+        sGameEventMgr.StartEvent(team == HORDE ? RVR_EVENT_SIEGE_NORTHWATCH : RVR_EVENT_SIEGE_CROSSROADS, true);
+
+        std::ostringstream text;
+        text << "|cffffd100[Barrens Front]|r The " << TeamName(team) << " holds the whole front! "
+             << (team == HORDE ? "The Northwatch Field Commander has taken the field near Northwatch Hold. Kill him!"
+                               : "The Crossroads Warlord has taken the field outside the Crossroads. Kill him!");
+        RvRAnnounce(text.str(), true);
+        m_rvrDirty = true;
+    }
+
+    void RenownModule::RvRStopSiege()
+    {
+        if (sGameEventMgr.IsActiveEvent(RVR_EVENT_SIEGE_NORTHWATCH))
+        {
+            sGameEventMgr.StopEvent(RVR_EVENT_SIEGE_NORTHWATCH, true);
+        }
+
+        if (sGameEventMgr.IsActiveEvent(RVR_EVENT_SIEGE_CROSSROADS))
+        {
+            sGameEventMgr.StopEvent(RVR_EVENT_SIEGE_CROSSROADS, true);
+        }
+
+        m_rvrSiegeTeam = 0;
+        m_rvrDirty = true;
+    }
+
+    void RenownModule::RvRLock(uint32 team)
+    {
+        RvRStopSiege();
+        for (size_t i = 0; i < m_rvrObjectives.size(); ++i)
+        {
+            RvRSetOwner(i, team);
+        }
+
+        m_rvrLockTeam = team;
+        m_rvrLockUntil = time(nullptr) + GetConfig()->rvrLockMinutes * MINUTE;
+
+        std::ostringstream text;
+        text << "|cffffd100[Barrens Front]|r The " << TeamName(team) << " has won the Barrens Front! The front is locked for "
+             << GetConfig()->rvrLockMinutes << " minutes.";
+        RvRAnnounce(text.str(), true);
+
+        RvRAwardBags(team);
+        m_rvrDirty = true;
+    }
+
+    void RenownModule::RvRAwardBags(uint32 winner)
+    {
+        struct Entry { Player* player; uint32 score; };
+        std::vector<Entry> winners;
+        std::vector<Entry> losers;
+        std::vector<std::pair<uint32, uint32>> earned;   // guid, lakeEarned
+        {
+            std::lock_guard<std::mutex> lock(m_dataMutex);
+            for (auto& entry : m_data)
+            {
+                if (entry.second.lakeEarned > 0)
+                {
+                    earned.emplace_back(entry.first, entry.second.lakeEarned);
+                }
+
+                entry.second.lakeEarned = 0;
+            }
+        }
+
+        for (const auto& entry : earned)
+        {
+            Player* player = sObjectMgr.GetPlayer(ObjectGuid(HIGHGUID_PLAYER, entry.first));
+            if (!player || !player->IsInWorld())
+            {
+                continue;
+            }
+
+            const uint32 score = entry.second * urand(80, 120);
+            (player->GetTeam() == winner ? winners : losers).push_back({ player, score });
+        }
+
+        auto byScore = [](const Entry& a, const Entry& b) { return a.score > b.score; };
+        std::sort(winners.begin(), winners.end(), byScore);
+        std::sort(losers.begin(), losers.end(), byScore);
+
+        std::ostringstream summary;
+        summary << "|cffffd100[Barrens Front] Loot bags:|r";
+        static const char* colors[] = { "|cffff8000Gold|r", "|cffa335eePurple|r", "|cff0070ddBlue|r" };
+        auto give = [&](const Entry& entry, BagType bag)
+        {
+            summary << " " << entry.player->GetName() << " (" << colors[bag] << ")";
+            if (entry.player->isRealPlayer())
+            {
+                GiveLootBag(entry.player, bag);
+            }
+        };
+
+        for (size_t i = 0; i < winners.size() && i < 8; ++i)
+        {
+            give(winners[i], i == 0 ? BAG_GOLD : (i < 3 ? BAG_PURPLE : BAG_BLUE));
+        }
+
+        for (size_t i = 0; i < losers.size() && i < 3; ++i)
+        {
+            give(losers[i], i == 0 ? BAG_PURPLE : BAG_BLUE);
+        }
+
+        if (!winners.empty() || !losers.empty())
+        {
+            RvRAnnounce(summary.str());
+        }
+    }
+
+    // ------------------------------------------------------------------ helpers
+    void RenownModule::RvRAnnounce(const std::string& text, bool worldwide) const
+    {
+        HashMapHolder<Player>::ReadGuard guard(HashMapHolder<Player>::GetLock());
+        for (const auto& entry : sObjectAccessor.GetPlayers())
+        {
+            Player* player = entry.second;
+            if (!player || !player->IsInWorld() || !player->isRealPlayer())
+            {
+                continue;
+            }
+
+            // The lake, the rest of the Barrens, or everyone for the big moments
+            if (worldwide || (player->GetMapId() == RVR_MAP && player->GetZoneId() == 17) || RvRIsMember(player->GetObjectGuid().GetCounter()))
+            {
+                ChatHandler(player).PSendSysMessage("%s", text.c_str());
+            }
+        }
+    }
+
+    void RenownModule::RvRSendStatus(Player* player) const
+    {
+        // RENOWNRVR<tab>owner,capTeam,pct;owner,capTeam,pct;owner,capTeam,pct/siegeTeam/lockTeam/lockSeconds/inLake
+        std::ostringstream message;
+        message << "RENOWNRVR\t";
+        for (size_t i = 0; i < m_rvrObjectives.size(); ++i)
+        {
+            const RvRObjective& o = m_rvrObjectives[i];
+            const uint32 pct = std::min<uint32>(100, o.progress * 100 / std::max<uint32>(1, GetConfig()->rvrCaptureTime * IN_MILLISECONDS));
+            message << (i ? ";" : "") << TeamState(o.owner) << "," << TeamState(o.capTeam) << "," << pct;
+        }
+
+        const time_t now = time(nullptr);
+        message << "/" << TeamState(m_rvrSiegeTeam) << "/" << TeamState(m_rvrLockTeam) << "/"
+                << (m_rvrLockUntil > now ? uint32(m_rvrLockUntil - now) : 0) << "/"
+                << (RvRIsMember(player->GetObjectGuid().GetCounter()) ? 1 : 0);
+        SendAddon(player, message.str());
+    }
+
+    bool RenownModule::RvRInLakeArea(const Player* player) const
+    {
+        if (m_rvrObjectives.size() != 3 || player->GetMapId() != RVR_MAP)
+        {
+            return false;
+        }
+
+        const float px = player->GetPositionX();
+        const float py = player->GetPositionY();
+        const Point path[] = { RVR_HORDE_COMMAND,
+                               { m_rvrObjectives[0].x, m_rvrObjectives[0].y, m_rvrObjectives[0].z },
+                               { m_rvrObjectives[1].x, m_rvrObjectives[1].y, m_rvrObjectives[1].z },
+                               { m_rvrObjectives[2].x, m_rvrObjectives[2].y, m_rvrObjectives[2].z },
+                               RVR_ALLIANCE_COMMAND };
+        for (size_t i = 0; i + 1 < sizeof(path) / sizeof(path[0]); ++i)
+        {
+            if (DistToSegment(px, py, path[i].x, path[i].y, path[i + 1].x, path[i + 1].y) <= RVR_LAKE_RADIUS)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    bool RenownModule::RvRIsMember(uint32 playerId) const
+    {
+        return m_rvrMembers.find(playerId) != m_rvrMembers.end();
+    }
+
+    uint32 RenownModule::RvROwnedBy(uint32 team) const
+    {
+        uint32 count = 0;
+        for (const RvRObjective& o : m_rvrObjectives)
+        {
+            if (o.owner == team)
+            {
+                ++count;
+            }
+        }
+
+        return count;
+    }
+
+    void RenownModule::RvRFrontPoint(uint32 team, float& x, float& y, float& z) const
+    {
+        // First objective (counted from the team's own side) that the team does not hold yet
+        const bool alliance = team == ALLIANCE;
+        const Point home = alliance ? RVR_ALLIANCE_COMMAND : RVR_HORDE_COMMAND;
+        Point target = alliance ? RVR_HORDE_COMMAND : RVR_ALLIANCE_COMMAND;   // siege: the enemy commander
+        for (int k = 0; k < 3; ++k)
+        {
+            const RvRObjective& o = m_rvrObjectives[alliance ? 2 - k : k];
+            if (o.owner != team)
+            {
+                target = { o.x, o.y, o.z };
+                break;
+            }
+        }
+
+        // Stage a little on the team's own side of the target
+        const float dx = home.x - target.x, dy = home.y - target.y;
+        const float len = std::max(1.0f, std::sqrt(dx * dx + dy * dy));
+        const float back = std::min(30.0f, len);
+        const float angle = frand(0.0f, 2.0f * float(M_PI));
+        const float spread = frand(0.0f, 8.0f);
+        x = target.x + dx / len * back + std::cos(angle) * spread;
+        y = target.y + dy / len * back + std::sin(angle) * spread;
+        z = target.z + 2.0f;
+    }
+
+    // ------------------------------------------------------------------ enter / leave
+    void RenownModule::RvREnterLake(Player* player)
+    {
+        const uint32 playerId = player->GetObjectGuid().GetCounter();
+        m_rvrMembers.insert(playerId);
+
+        const uint32 cap = GetConfig()->rvrMaxLevel;
+        if (player->GetLevel() > cap && !player->IsGameMaster())
+        {
+            m_rvrChickens.insert(playerId);
+            player->RemoveSpellsCausingAura(SPELL_AURA_MOUNTED);
+            player->SetDisplayId(RVR_CHICKEN_DISPLAY);
+            player->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_PACIFIED | UNIT_FLAG_SILENCED);
+            if (player->isRealPlayer())
+            {
+                ChatHandler(player).PSendSysMessage("|cffffd100[Barrens Front]|r You are too powerful for this tier 1 battlefield (max level %u) and have been turned into a chicken!", cap);
+            }
+        }
+        else if (player->GetLevel() < cap && GetConfig()->bolsterEnabled && !player->InBattleGround())
+        {
+            {
+                std::lock_guard<std::mutex> lock(m_bolsterMutex);
+                m_bolster[playerId] = cap;
+            }
+
+            ApplyLevelStats(player, cap);
+        }
+
+        player->UpdatePvP(true, true);
+        if (player->isRealPlayer())
+        {
+            ChatHandler(player).PSendSysMessage("|cffffd100[Barrens Front]|r You entered the tier 1 RvR lake. Capture Kolkar Watch, the Stagnant Oasis and the Raptor Grounds!");
+            RvRSendStatus(player);
+        }
+    }
+
+    void RenownModule::RvRLeaveLake(Player* player)
+    {
+        const uint32 playerId = player->GetObjectGuid().GetCounter();
+        m_rvrMembers.erase(playerId);
+
+        if (m_rvrChickens.erase(playerId))
+        {
+            player->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_PACIFIED | UNIT_FLAG_SILENCED);
+            player->DeMorph();
+        }
+
+        if (!player->InBattleGround())
+        {
+            bool wasBolstered = false;
+            {
+                std::lock_guard<std::mutex> lock(m_bolsterMutex);
+                wasBolstered = m_bolster.erase(playerId) > 0;
+            }
+
+            if (wasBolstered)
+            {
+                ApplyLevelStats(player, player->GetLevel());
+            }
+        }
+
+        if (player->isRealPlayer())
+        {
+            RvRSendStatus(player);
+        }
+    }
+
+    // ------------------------------------------------------------------ bots
+    void RenownModule::RvRReinforce(const std::vector<Player*>& players)
+    {
+        const uint32 perSide = GetConfig()->rvrBotsPerSide;
+        if (!perSide || m_rvrLockTeam)
+        {
+            return;
+        }
+
+        for (uint32 team : { (uint32)ALLIANCE, (uint32)HORDE })
+        {
+            uint32 present = 0;
+            std::vector<Player*> candidates;
+            for (Player* player : players)
+            {
+                if (player->isRealPlayer() || player->GetTeam() != team)
+                {
+                    continue;
+                }
+
+                if (RvRIsMember(player->GetObjectGuid().GetCounter()))
+                {
+                    ++present;
+                    continue;
+                }
+
+                if (player->GetLevel() < 10 || player->GetLevel() > GetConfig()->rvrMaxLevel || !player->IsAlive() ||
+                    player->IsInCombat() || player->InBattleGround() || player->InBattleGroundQueue() || player->GetGroup() ||
+                    player->IsTaxiFlying() || player->IsBeingTeleported() || !player->GetMap() || player->GetMap()->Instanceable())
+                {
+                    continue;
+                }
+
+                candidates.push_back(player);
+            }
+
+            uint32 need = present < perSide ? perSide - present : 0;
+            need = std::min<uint32>(need, 3);   // a few at a time
+            while (need-- > 0 && !candidates.empty())
+            {
+                const size_t pick = urand(0, uint32(candidates.size() - 1));
+                Player* bot = candidates[pick];
+                candidates.erase(candidates.begin() + pick);
+
+                float x, y, z;
+                RvRFrontPoint(team, x, y, z);
+                bot->TeleportTo(RVR_MAP, x, y, z, frand(0.0f, 6.28f));
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ main loop
+    void RenownModule::OnUpdate(uint32 elapsed)
+    {
+        if (!GetConfig()->enabled || !GetConfig()->rvrEnabled || m_rvrObjectives.size() != 3)
+        {
+            return;
+        }
+
+        m_rvrTimer += elapsed;
+        if (m_rvrTimer < IN_MILLISECONDS)
+        {
+            return;
+        }
+
+        const uint32 diff = m_rvrTimer;
+        m_rvrTimer = 0;
+        if (m_rvrResetRequested)
+        {
+            m_rvrResetRequested = false;
+            RvRReset();
+        }
+
+        RvRUpdate(diff);
+    }
+
+    void RenownModule::RvRUpdate(uint32 diff)
+    {
+        const RenownModuleConfig* config = GetConfig();
+
+        std::vector<Player*> players;
+        {
+            HashMapHolder<Player>::ReadGuard guard(HashMapHolder<Player>::GetLock());
+            players.reserve(sObjectAccessor.GetPlayers().size());
+            for (const auto& entry : sObjectAccessor.GetPlayers())
+            {
+                if (entry.second && entry.second->IsInWorld() && !entry.second->IsBeingTeleported())
+                {
+                    players.push_back(entry.second);
+                }
+            }
+        }
+
+        // Membership: who is inside the lake
+        std::unordered_set<uint32> seen;
+        std::vector<Player*> members;
+        for (Player* player : players)
+        {
+            const uint32 playerId = player->GetObjectGuid().GetCounter();
+            const bool inside = RvRInLakeArea(player);
+            const bool member = RvRIsMember(playerId);
+            if (inside && !member)
+            {
+                RvREnterLake(player);
+            }
+            else if (!inside && member)
+            {
+                RvRLeaveLake(player);
+            }
+
+            if (inside)
+            {
+                seen.insert(playerId);
+                members.push_back(player);
+                if (m_rvrChickens.count(playerId))
+                {
+                    // keep the chicken a chicken (other effects may clear these)
+                    if (player->GetDisplayId() != RVR_CHICKEN_DISPLAY)
+                    {
+                        player->SetDisplayId(RVR_CHICKEN_DISPLAY);
+                    }
+
+                    player->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_PACIFIED | UNIT_FLAG_SILENCED);
+                }
+            }
+        }
+
+        // Players that logged out or vanished while inside
+        for (auto itr = m_rvrMembers.begin(); itr != m_rvrMembers.end();)
+        {
+            if (!seen.count(*itr))
+            {
+                m_rvrChickens.erase(*itr);
+                itr = m_rvrMembers.erase(itr);
+            }
+            else
+            {
+                ++itr;
+            }
+        }
+
+        // Locked: wait for the reset
+        if (m_rvrLockTeam)
+        {
+            if (time(nullptr) >= m_rvrLockUntil)
+            {
+                RvRReset();
+                RvRAnnounce("|cffffd100[Barrens Front]|r The front is open again. All objectives are neutral.", true);
+            }
+        }
+        else
+        {
+            // Captures
+            const float radius = (float)config->rvrCaptureRadius;
+            const uint32 captureMs = config->rvrCaptureTime * IN_MILLISECONDS;
+            for (size_t i = 0; i < m_rvrObjectives.size(); ++i)
+            {
+                RvRObjective& o = m_rvrObjectives[i];
+                std::vector<Player*> near[2];
+                for (Player* player : members)
+                {
+                    if (!player->IsAlive() || m_rvrChickens.count(player->GetObjectGuid().GetCounter()) || player->IsGameMaster())
+                    {
+                        continue;
+                    }
+
+                    const float dx = player->GetPositionX() - o.x, dy = player->GetPositionY() - o.y;
+                    if (dx * dx + dy * dy <= radius * radius && std::fabs(player->GetPositionZ() - o.z) < 20.0f)
+                    {
+                        near[player->GetTeam() == ALLIANCE ? 0 : 1].push_back(player);
+                    }
+                }
+
+                uint32 team = 0;
+                if (!near[0].empty() && near[1].empty())
+                {
+                    team = ALLIANCE;
+                }
+                else if (near[0].empty() && !near[1].empty())
+                {
+                    team = HORDE;
+                }
+
+                // The center can only be taken by a side that holds both towers
+                const bool allowed = team && (o.tower || (m_rvrObjectives[0].owner == team && m_rvrObjectives[2].owner == team));
+                if (team && team != o.owner && allowed)
+                {
+                    if (o.capTeam != team)
+                    {
+                        o.capTeam = team;
+                        o.progress = 0;
+                    }
+
+                    o.progress += diff;
+                    m_rvrDirty = true;
+                    if (o.progress >= captureMs)
+                    {
+                        const uint32 previous = o.owner;
+                        RvRSetOwner(i, team);
+
+                        std::ostringstream text;
+                        text << "|cffffd100[Barrens Front]|r The " << TeamName(team) << " has captured " << o.name
+                             << (previous ? " from the " : "") << (previous ? TeamName(previous) : "") << "!";
+                        RvRAnnounce(text.str());
+
+                        for (Player* player : near[team == ALLIANCE ? 0 : 1])
+                        {
+                            AddRenown(player, config->rvrCapturePoints);
+                        }
+                    }
+                }
+                else if (!near[0].empty() && !near[1].empty())
+                {
+                    // contested: progress holds
+                }
+                else if (o.progress > 0)
+                {
+                    o.progress = o.progress > diff ? o.progress - diff : 0;
+                    if (!o.progress)
+                    {
+                        o.capTeam = 0;
+                    }
+
+                    m_rvrDirty = true;
+                }
+            }
+
+            // Holding the whole front opens a siege; losing any objective ends it
+            uint32 holder = 0;
+            if (RvROwnedBy(ALLIANCE) == 3)
+            {
+                holder = ALLIANCE;
+            }
+            else if (RvROwnedBy(HORDE) == 3)
+            {
+                holder = HORDE;
+            }
+
+            if (holder)
+            {
+                if (m_rvrHoldTeam != holder)
+                {
+                    m_rvrHoldTeam = holder;
+                    m_rvrHoldTime = 0;
+                }
+
+                m_rvrHoldTime += diff;
+                if (!m_rvrSiegeTeam && m_rvrHoldTime >= config->rvrSiegeHold * IN_MILLISECONDS)
+                {
+                    RvRStartSiege(holder);
+                }
+            }
+            else
+            {
+                m_rvrHoldTeam = 0;
+                m_rvrHoldTime = 0;
+                if (m_rvrSiegeTeam)
+                {
+                    std::ostringstream text;
+                    text << "|cffffd100[Barrens Front]|r The " << TeamName(m_rvrSiegeTeam) << " siege has been broken. The commander retreats.";
+                    RvRStopSiege();
+                    RvRAnnounce(text.str());
+                }
+            }
+
+            // Renown ticks for holding objectives
+            m_rvrTickTimer += diff;
+            if (m_rvrTickTimer >= MINUTE * IN_MILLISECONDS)
+            {
+                m_rvrTickTimer = 0;
+                for (Player* player : members)
+                {
+                    if (m_rvrChickens.count(player->GetObjectGuid().GetCounter()))
+                    {
+                        continue;
+                    }
+
+                    const uint32 owned = RvROwnedBy(player->GetTeam());
+                    if (owned && config->rvrTickPoints)
+                    {
+                        AddRenown(player, config->rvrTickPoints * owned);
+                    }
+                }
+            }
+
+            // Bots keep the front busy
+            m_rvrBotTimer += diff;
+            if (m_rvrBotTimer >= 30 * IN_MILLISECONDS)
+            {
+                m_rvrBotTimer = 0;
+                RvRReinforce(players);
+            }
+        }
+
+        // Status for the addon
+        m_rvrStatusTimer += diff;
+        if (m_rvrDirty || m_rvrStatusTimer >= 10 * IN_MILLISECONDS)
+        {
+            m_rvrDirty = false;
+            m_rvrStatusTimer = 0;
+            for (Player* player : members)
+            {
+                if (player->isRealPlayer())
+                {
+                    RvRSendStatus(player);
+                }
+            }
+        }
+    }
+
+    void RenownModule::OnKill(Unit* unit, Unit* victim)
+    {
+        if (!victim || victim->GetTypeId() != TYPEID_UNIT || !m_rvrSiegeTeam || m_rvrLockTeam)
+        {
+            return;
+        }
+
+        const uint32 entry = victim->GetEntry();
+        if ((entry == RVR_COMMANDER_ALLIANCE && m_rvrSiegeTeam == HORDE) || (entry == RVR_COMMANDER_HORDE && m_rvrSiegeTeam == ALLIANCE))
+        {
+            if (Player* player = unit ? unit->GetBeneficiaryPlayer() : nullptr)
+            {
+                AddRenown(player, 100);
+            }
+
+            RvRLock(m_rvrSiegeTeam);
+        }
+    }
+
+    // ------------------------------------------------------------------ commands
+    bool RenownModule::HandleRvRCommand(WorldSession* session, const std::string& args)
+    {
+        Player* player = session ? session->GetPlayer() : nullptr;
+        if (!player || !GetConfig()->enabled)
+        {
+            return false;
+        }
+
+        ChatHandler handler(player);
+        if (!GetConfig()->rvrEnabled || m_rvrObjectives.size() != 3)
+        {
+            handler.PSendSysMessage("The Barrens Front is not available.");
+            return true;
+        }
+
+        const uint32 playerId = player->GetObjectGuid().GetCounter();
+        if (args == "join" || args.empty())
+        {
+            if (player->GetLevel() > GetConfig()->rvrMaxLevel && !player->IsGameMaster())
+            {
+                handler.PSendSysMessage("|cffffd100[Barrens Front]|r This tier 1 battlefield is for levels 1-%u.", GetConfig()->rvrMaxLevel);
+                return true;
+            }
+
+            if (player->InBattleGround() || player->IsInCombat() || !player->IsAlive() || player->IsTaxiFlying() || player->GetMap()->Instanceable())
+            {
+                handler.PSendSysMessage("|cffffd100[Barrens Front]|r You can't travel to the front right now (in combat, dead, flying, in a battleground or an instance).");
+                return true;
+            }
+
+            if (!RvRIsMember(playerId) && !RvRInLakeArea(player))
+            {
+                std::lock_guard<std::mutex> lock(m_rvrReturnMutex);
+                m_rvrReturn[playerId] = WorldLocation(player->GetMapId(), player->GetPositionX(), player->GetPositionY(), player->GetPositionZ(), player->GetOrientation());
+            }
+
+            const bool alliance = player->GetTeam() == ALLIANCE;
+            const Point& p = alliance ? RVR_ALLIANCE_ARRIVAL : RVR_HORDE_ARRIVAL;
+            player->TeleportTo(RVR_MAP, p.x, p.y, p.z, alliance ? RVR_ALLIANCE_ARRIVAL_O : RVR_HORDE_ARRIVAL_O);
+            handler.PSendSysMessage("|cffffd100[Barrens Front]|r Off to %s. The front lies %s.", alliance ? "Northwatch Hold" : "the Crossroads",
+                                    alliance ? "to the north, past the Raptor Grounds" : "to the southeast, past Kolkar Watch");
+            return true;
+        }
+
+        if (args == "leave")
+        {
+            if (player->IsInCombat() || player->InBattleGround() || player->IsTaxiFlying())
+            {
+                handler.PSendSysMessage("|cffffd100[Barrens Front]|r You can't leave right now.");
+                return true;
+            }
+
+            bool found = false;
+            WorldLocation loc;
+            {
+                std::lock_guard<std::mutex> lock(m_rvrReturnMutex);
+                auto itr = m_rvrReturn.find(playerId);
+                if (itr != m_rvrReturn.end())
+                {
+                    loc = itr->second;
+                    m_rvrReturn.erase(itr);
+                    found = true;
+                }
+            }
+
+            if (found)
+            {
+                player->TeleportTo(loc.mapid, loc.coord_x, loc.coord_y, loc.coord_z, loc.orientation);
+            }
+            else
+            {
+                player->TeleportToHomebind();
+            }
+
+            return true;
+        }
+
+        if (args == "status")
+        {
+            std::ostringstream text;
+            text << "|cffffd100[Barrens Front]|r";
+            for (const RvRObjective& o : m_rvrObjectives)
+            {
+                text << " " << o.name << ": " << TeamName(o.owner) << ".";
+            }
+
+            if (m_rvrSiegeTeam)
+            {
+                text << " Siege by the " << TeamName(m_rvrSiegeTeam) << "!";
+            }
+
+            if (m_rvrLockTeam)
+            {
+                text << " Locked by the " << TeamName(m_rvrLockTeam) << " for " << uint32((m_rvrLockUntil - time(nullptr)) / MINUTE + 1) << " more minutes.";
+            }
+
+            handler.PSendSysMessage("%s", text.str().c_str());
+            RvRSendStatus(player);
+            return true;
+        }
+
+        if (args == "reset" && session->GetSecurity() >= SEC_GAMEMASTER)
+        {
+            m_rvrResetRequested = true;   // done on the world thread
+            handler.PSendSysMessage("Barrens Front will reset in a moment.");
+            return true;
+        }
+
+        handler.PSendSysMessage("Usage: .renown rvr join | leave | status");
+        return true;
+    }
+
+    bool RenownModule::HandleQueueCommand(WorldSession* session, const std::string& args)
+    {
+        Player* player = session ? session->GetPlayer() : nullptr;
+        if (!player || !GetConfig()->enabled)
+        {
+            return false;
+        }
+
+        uint32 mapId = 0;
+        if (args == "wsg" || args == "warsong")
+        {
+            mapId = 489;
+        }
+        else if (args == "ab" || args == "arathi")
+        {
+            mapId = 529;
+        }
+        else if (args == "av" || args == "alterac")
+        {
+            mapId = 30;
+        }
+
+        if (!mapId)
+        {
+            ChatHandler(player).PSendSysMessage("Usage: .renown queue wsg | ab | av");
+            return true;
+        }
+
+        if (player->InBattleGround())
+        {
+            ChatHandler(player).PSendSysMessage("You are already in a battleground.");
+            return true;
+        }
+
+        const Group* group = player->GetGroup();
+        const uint8 asGroup = (group && group->IsLeader(player->GetObjectGuid())) ? 1 : 0;
+
+        // The same request the client sends from a battlemaster, with the player's own guid (allowed by the core patch)
+        WorldPacket data(CMSG_BATTLEMASTER_JOIN, 8 + 4 + 4 + 1);
+        data << player->GetObjectGuid();
+        data << uint32(mapId);
+        data << uint32(0);
+        data << uint8(asGroup);
+        session->HandleBattlemasterJoinOpcode(data);
+        return true;
+    }
+}
