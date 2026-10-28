@@ -93,7 +93,7 @@ namespace RenownLauncher
         private static readonly Color Back = Color.FromArgb(24, 20, 16);
         private static readonly Color Panel = Color.FromArgb(38, 32, 25);
         private static readonly Color Gold = Color.FromArgb(230, 180, 60);
-        private static readonly Color Text = Color.FromArgb(235, 228, 210);
+        private static readonly Color Ink = Color.FromArgb(235, 228, 210);
         private static readonly Color Dim = Color.FromArgb(160, 150, 130);
         private static readonly Color Good = Color.FromArgb(90, 200, 90);
         private static readonly Color Bad = Color.FromArgb(220, 70, 60);
@@ -126,7 +126,7 @@ namespace RenownLauncher
             MaximizeBox = false;
             StartPosition = FormStartPosition.CenterScreen;
             BackColor = Back;
-            ForeColor = Text;
+            ForeColor = Ink;
             Font = new Font("Segoe UI", 9.5f);
             try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
 
@@ -145,7 +145,7 @@ namespace RenownLauncher
             news.ScrollBars = ScrollBars.Vertical;
             news.BorderStyle = BorderStyle.None;
             news.BackColor = Panel;
-            news.ForeColor = Text;
+            news.ForeColor = Ink;
             news.SetBounds(20, 88, 600, 190);
             news.Text = "Loading news...";
             Controls.Add(news);
@@ -177,7 +177,7 @@ namespace RenownLauncher
             Controls.Add(wowLabel);
             wowPath.SetBounds(110, 364, 400, 24);
             wowPath.BackColor = Panel;
-            wowPath.ForeColor = Text;
+            wowPath.ForeColor = Ink;
             wowPath.BorderStyle = BorderStyle.FixedSingle;
             wowPath.ReadOnly = true;
             Controls.Add(wowPath);
@@ -210,7 +210,7 @@ namespace RenownLauncher
             b.FlatStyle = FlatStyle.Flat;
             b.FlatAppearance.BorderColor = Gold;
             b.BackColor = primary ? Color.FromArgb(120, 80, 20) : Panel;
-            b.ForeColor = primary ? Color.White : Text;
+            b.ForeColor = primary ? Color.White : Ink;
             b.Cursor = Cursors.Hand;
         }
 
@@ -350,7 +350,7 @@ namespace RenownLauncher
                 return;
             }
 
-            ztText.ForeColor = Text;
+            ztText.ForeColor = Ink;
             if (!ZeroTierInstalled())
             {
                 ztLight.BackColor = Bad;
