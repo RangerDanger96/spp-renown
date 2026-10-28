@@ -35,7 +35,7 @@ namespace cmangos_module
         // Gossip hooks
         bool OnPreGossipHello(Player* player, Creature* creature) override;
 
-        // Chat commands: .renown info | .renown top | .renown add <points> [name] | .renown set <rank> [name]
+        // Chat commands: .renown info | .renown top | .renown sync | .renown add <points> [name] | .renown set <rank> [name]
         const char* GetChatCommandPrefix() const override { return "renown"; }
         std::vector<ModuleChatCommand>* GetCommandTable() override;
 
@@ -56,6 +56,8 @@ namespace cmangos_module
         // Gives the player every insignia they have earned but don't own yet
         void GrantMissingInsignias(Player* player, uint32 rank, bool silent);
         void SendStatus(Player* target, Player* about) const;
+        // Pushes the player's renown to the RenownBar addon (hidden addon message, no chat output)
+        void SendAddonUpdate(Player* player) const;
 
         bool CanEarnRenown(const Player* player) const;
         static std::string GetRankTitle(uint32 rank);
@@ -65,6 +67,7 @@ namespace cmangos_module
         bool HandleTopCommand(WorldSession* session, const std::string& args);
         bool HandleAddCommand(WorldSession* session, const std::string& args);
         bool HandleSetCommand(WorldSession* session, const std::string& args);
+        bool HandleSyncCommand(WorldSession* session, const std::string& args);
         Player* ResolveCommandTarget(WorldSession* session, const std::string& name) const;
 
     private:

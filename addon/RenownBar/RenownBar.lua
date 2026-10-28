@@ -1,6 +1,7 @@
 -- RenownBar: a Renown progress bar for the spp-renown server module (WoW 1.12 / Lua 5.0)
--- The server has no special packet for Renown, so the addon asks with ".renown info",
--- reads the reply and hides it from the chat window.
+-- The server pushes Renown updates as hidden addon messages (prefix "RENOWN") the moment they
+-- change. ".renown sync" asks for one silently on login. If the server is an older build without
+-- push support, the addon falls back to polling ".renown info" and hiding the reply.
 
 local QUERY_COMMAND = ".renown info"
 local MIN_QUERY_GAP = 3        -- seconds between queries
@@ -14,6 +15,8 @@ local queryDeadline = 0
 local pollTimer = 0
 local delayedQueryAt = nil
 local available = nil          -- nil = unknown, true/false once the server answered
+local pushMode = false         -- true once the server has pushed an update
+local syncDeadline = nil       -- fall back to polling if no push arrives by then
 
 RenownBarDB = RenownBarDB or {}
 
@@ -118,6 +121,23 @@ local function QueryLater(seconds)
     if not delayedQueryAt or at < delayedQueryAt then delayedQueryAt = at end
 end
 
+-- Handles a pushed update: "rank:progress:needed:nextRank:total:maxed:title"
+local function ParsePush(msg)
+    local _, _, r, c, n, nr, tot, mx, t = string.find(msg or "", "^(%d+):(%d+):(%d+):(%d+):(%d+):(%d):(.*)$")
+    if not r then return end
+    rank, current, needed, nextRank, total, title = tonumber(r), tonumber(c), tonumber(n), tonumber(nr), tonumber(tot), t
+    maxed = (mx == "1")
+    available = true
+    pushMode = true
+    syncDeadline = nil
+    Refresh()
+end
+
+local function Sync()
+    SendChatMessage(".renown sync", "SAY")
+    syncDeadline = GetTime() + 8
+end
+
 -- Returns true if the message is one of our status replies (and stores the values)
 local function ParseStatus(msg)
     if not msg then return false end
@@ -173,6 +193,7 @@ end
 bar:RegisterEvent("VARIABLES_LOADED")
 bar:RegisterEvent("PLAYER_ENTERING_WORLD")
 bar:RegisterEvent("CHAT_MSG_SYSTEM")
+bar:RegisterEvent("CHAT_MSG_ADDON")
 bar:RegisterEvent("CHAT_MSG_COMBAT_HONOR_GAIN")
 bar:RegisterEvent("PLAYER_PVP_KILLS_CHANGED")
 bar:RegisterEvent("UPDATE_BATTLEFIELD_STATUS")
@@ -183,7 +204,9 @@ bar:SetScript("OnEvent", function()
         RestorePosition()
         if RenownBarDB.hidden then bar:Hide() end
     elseif event == "PLAYER_ENTERING_WORLD" then
-        QueryLater(4)
+        Sync()
+    elseif event == "CHAT_MSG_ADDON" then
+        if arg1 == "RENOWN" and arg4 == UnitName("player") then ParsePush(arg2) end
     elseif event == "CHAT_MSG_SYSTEM" then
         if ParseStatus(arg1) then
             if pendingSuppress > 0 then pendingSuppress = pendingSuppress - 1 end
@@ -194,15 +217,23 @@ bar:SetScript("OnEvent", function()
             available = false
             text:SetText("Renown: server module not found")
         end
-    elseif event == "CHAT_MSG_COMBAT_HONOR_GAIN" or event == "PLAYER_PVP_KILLS_CHANGED" then
+    elseif not pushMode and (event == "CHAT_MSG_COMBAT_HONOR_GAIN" or event == "PLAYER_PVP_KILLS_CHANGED") then
         QueryLater(2)
-    elseif event == "UPDATE_BATTLEFIELD_STATUS" or event == "UPDATE_BATTLEFIELD_SCORE" then
+    elseif not pushMode and (event == "UPDATE_BATTLEFIELD_STATUS" or event == "UPDATE_BATTLEFIELD_SCORE") then
         QueryLater(3)
     end
 end)
 
 bar:SetScript("OnUpdate", function()
     local now = GetTime()
+
+    -- No push arrived: older server build, use the polling fallback
+    if syncDeadline and now > syncDeadline then
+        syncDeadline = nil
+        QueryLater(0)
+    end
+
+    if pushMode then return end
 
     if pendingSuppress > 0 and queryDeadline > 0 and now > queryDeadline then
         pendingSuppress = 0
@@ -233,7 +264,8 @@ SlashCmdList["RENOWNBAR"] = function(msg)
     elseif msg == "reset" then
         RenownBarDB.point = nil; RestorePosition()
     elseif msg == "refresh" then
-        available = nil; Query(true)
+        available = nil
+        if pushMode then Sync() else Query(true) end
     else
         DEFAULT_CHAT_FRAME:AddMessage("|cffffd100RenownBar:|r /renownbar show | hide | reset | refresh  (shift-drag the bar to move it)")
     end

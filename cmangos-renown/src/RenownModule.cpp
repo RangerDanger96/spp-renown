@@ -287,6 +287,8 @@ namespace cmangos_module
         {
             OnRankChanged(player, oldRank, newRank);
         }
+
+        SendAddonUpdate(player);
     }
 
     void RenownModule::SetRenownPoints(Player* player, uint32 points)
@@ -314,6 +316,8 @@ namespace cmangos_module
         {
             OnRankChanged(player, oldRank, newRank);
         }
+
+        SendAddonUpdate(player);
     }
 
     void RenownModule::OnRankChanged(Player* player, uint32 oldRank, uint32 newRank)
@@ -416,6 +420,39 @@ namespace cmangos_module
         }
     }
 
+    void RenownModule::SendAddonUpdate(Player* player) const
+    {
+        if (!player || !player->isRealPlayer() || !player->GetSession())
+        {
+            return;
+        }
+
+        RenownData data;
+        {
+            std::lock_guard<std::mutex> lock(m_dataMutex);
+            auto it = m_data.find(player->GetObjectGuid().GetCounter());
+            if (it != m_data.end())
+            {
+                data = it->second;
+            }
+        }
+
+        const RenownModuleConfig* config = GetConfig();
+        const bool maxed = data.rank >= config->maxRank;
+        const uint32 current = config->GetPointsForRank(data.rank);
+        const uint32 next = maxed ? current : config->GetPointsForRank(data.rank + 1);
+
+        // Format: RENOWN<tab>rank:progress:needed:nextRank:total:maxed:title
+        std::ostringstream message;
+        message << "RENOWN\t" << data.rank << ":" << (data.points - current) << ":" << (next - current) << ":"
+                << (maxed ? data.rank : data.rank + 1) << ":" << data.points << ":" << (maxed ? 1 : 0) << ":" << GetRankTitle(data.rank);
+
+        // A party addon message from the player to themself: the 1.12 client raises CHAT_MSG_ADDON and shows nothing in chat
+        WorldPacket packet;
+        ChatHandler::BuildChatPacket(packet, CHAT_MSG_PARTY, message.str().c_str(), LANG_ADDON, CHAT_TAG_NONE, player->GetObjectGuid(), player->GetName());
+        player->GetSession()->SendPacket(packet);
+    }
+
     std::string RenownModule::GetRankTitle(uint32 rank)
     {
         if (rank >= 40) return "Legend";
@@ -435,6 +472,7 @@ namespace cmangos_module
         {
             { "info", std::bind(&RenownModule::HandleInfoCommand, this, std::placeholders::_1, std::placeholders::_2), SEC_PLAYER },
             { "top", std::bind(&RenownModule::HandleTopCommand, this, std::placeholders::_1, std::placeholders::_2), SEC_PLAYER },
+            { "sync", std::bind(&RenownModule::HandleSyncCommand, this, std::placeholders::_1, std::placeholders::_2), SEC_PLAYER },
             { "add", std::bind(&RenownModule::HandleAddCommand, this, std::placeholders::_1, std::placeholders::_2), SEC_GAMEMASTER },
             { "set", std::bind(&RenownModule::HandleSetCommand, this, std::placeholders::_1, std::placeholders::_2), SEC_GAMEMASTER }
         };
@@ -475,8 +513,32 @@ namespace cmangos_module
             return false;
         }
 
-        Player* about = ResolveCommandTarget(session, args);
+        // Players see their own renown; GMs can also look at their target or a named player
+        Player* about = self;
+        if (session->GetSecurity() >= SEC_GAMEMASTER)
+        {
+            about = ResolveCommandTarget(session, args);
+        }
+        else if (!args.empty())
+        {
+            about = ObjectMgr::GetPlayer(args.c_str());
+        }
+
         SendStatus(self, about ? about : self);
+        SendAddonUpdate(self);
+        return true;
+    }
+
+    bool RenownModule::HandleSyncCommand(WorldSession* session, const std::string& args)
+    {
+        Player* self = session ? session->GetPlayer() : nullptr;
+        if (!self || !GetConfig()->enabled)
+        {
+            return false;
+        }
+
+        // Silent: only the addon data is sent
+        SendAddonUpdate(self);
         return true;
     }
 
