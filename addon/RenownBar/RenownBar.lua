@@ -1,0 +1,240 @@
+-- RenownBar: a Renown progress bar for the spp-renown server module (WoW 1.12 / Lua 5.0)
+-- The server has no special packet for Renown, so the addon asks with ".renown info",
+-- reads the reply and hides it from the chat window.
+
+local QUERY_COMMAND = ".renown info"
+local MIN_QUERY_GAP = 3        -- seconds between queries
+local BG_POLL_INTERVAL = 30    -- seconds, while inside a battleground
+local WORLD_POLL_INTERVAL = 180
+
+local rank, title, current, needed, nextRank, total, maxed = nil
+local lastQuery = 0
+local pendingSuppress = 0      -- number of status replies to hide from chat
+local queryDeadline = 0
+local pollTimer = 0
+local delayedQueryAt = nil
+local available = nil          -- nil = unknown, true/false once the server answered
+
+RenownBarDB = RenownBarDB or {}
+
+-- ---------------------------------------------------------------- frame
+local bar = CreateFrame("StatusBar", "RenownBarFrame", UIParent)
+bar:SetWidth(512)
+bar:SetHeight(12)
+bar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
+bar:SetStatusBarColor(0.80, 0.55, 0.10)
+bar:SetMinMaxValues(0, 1)
+bar:SetValue(0)
+bar:SetMovable(true)
+bar:EnableMouse(true)
+if bar.SetClampedToScreen then bar:SetClampedToScreen(true) end
+
+local bg = bar:CreateTexture(nil, "BACKGROUND")
+bg:SetAllPoints(bar)
+bg:SetTexture(0, 0, 0, 0.55)
+
+local border = CreateFrame("Frame", nil, bar)
+border:SetPoint("TOPLEFT", bar, "TOPLEFT", -3, 3)
+border:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 3, -3)
+border:SetBackdrop({ edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 10 })
+border:SetBackdropBorderColor(0.85, 0.65, 0.20, 0.9)
+
+local text = bar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+text:SetPoint("CENTER", bar, "CENTER", 0, 1)
+text:SetText("Renown: waiting for server...")
+
+local function SavePosition()
+    local point, _, relPoint, x, y = bar:GetPoint()
+    RenownBarDB.point, RenownBarDB.relPoint, RenownBarDB.x, RenownBarDB.y = point, relPoint, x, y
+end
+
+local function RestorePosition()
+    bar:ClearAllPoints()
+    if RenownBarDB.point then
+        bar:SetPoint(RenownBarDB.point, UIParent, RenownBarDB.relPoint, RenownBarDB.x, RenownBarDB.y)
+    else
+        -- just above the action bar / experience bar
+        bar:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, 92)
+    end
+end
+
+bar:SetScript("OnMouseDown", function()
+    if IsShiftKeyDown() then this:StartMoving() end
+end)
+bar:SetScript("OnMouseUp", function()
+    this:StopMovingOrSizing()
+    SavePosition()
+end)
+
+bar:SetScript("OnEnter", function()
+    GameTooltip:SetOwner(this, "ANCHOR_TOP")
+    GameTooltip:AddLine("Renown", 1, 0.82, 0)
+    if rank then
+        GameTooltip:AddLine("Rank " .. rank .. " - " .. title, 1, 1, 1)
+        if maxed then
+            GameTooltip:AddLine("Maximum rank reached (" .. total .. " renown)", 0.6, 1, 0.6)
+        else
+            GameTooltip:AddLine(current .. " / " .. needed .. " renown to rank " .. nextRank, 0.9, 0.9, 0.9)
+            GameTooltip:AddLine((needed - current) .. " renown remaining", 0.7, 0.7, 0.7)
+        end
+    else
+        GameTooltip:AddLine("No data from the server yet.", 0.8, 0.8, 0.8)
+    end
+    GameTooltip:AddLine("Earn renown from player kills, objectives and battleground wins.", 0.6, 0.6, 0.6, 1)
+    GameTooltip:AddLine("Shift-drag to move. /renownbar for options.", 0.5, 0.5, 0.5)
+    GameTooltip:Show()
+end)
+bar:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+local function Refresh()
+    if not rank then return end
+    if maxed then
+        bar:SetMinMaxValues(0, 1)
+        bar:SetValue(1)
+        text:SetText("Renown Rank " .. rank .. " (" .. title .. ") - MAX")
+    else
+        bar:SetMinMaxValues(0, math.max(needed, 1))
+        bar:SetValue(current)
+        text:SetText("Renown Rank " .. rank .. " (" .. title .. ")   " .. current .. " / " .. needed)
+    end
+end
+
+-- ---------------------------------------------------------------- querying
+local function Query(force)
+    local now = GetTime()
+    if not force and now - lastQuery < MIN_QUERY_GAP then
+        delayedQueryAt = lastQuery + MIN_QUERY_GAP
+        return
+    end
+    lastQuery = now
+    pendingSuppress = pendingSuppress + 1
+    queryDeadline = now + 6
+    -- name the player explicitly, otherwise the server reports on your current target
+    SendChatMessage(QUERY_COMMAND .. " " .. UnitName("player"), "SAY")
+end
+
+local function QueryLater(seconds)
+    local at = GetTime() + seconds
+    if not delayedQueryAt or at < delayedQueryAt then delayedQueryAt = at end
+end
+
+-- Returns true if the message is one of our status replies (and stores the values)
+local function ParseStatus(msg)
+    if not msg then return false end
+    local me = UnitName("player")
+    local plain = string.gsub(msg, "|c%x%x%x%x%x%x%x%x", "")
+    plain = string.gsub(plain, "|r", "")
+    local prefix = "[Renown] " .. me .. ": Renown Rank "
+    if string.sub(plain, 1, string.len(prefix)) ~= prefix then return false end
+
+    local _, _, r, t, c, n, nr = string.find(plain, "Renown Rank (%d+) %((.-)%)%. (%d+) / (%d+) renown to rank (%d+)")
+    if r then
+        rank, title, current, needed, nextRank = tonumber(r), t, tonumber(c), tonumber(n), tonumber(nr)
+        maxed = false
+        available = true
+        Refresh()
+        return true
+    end
+
+    local _, _, r2, t2, p2 = string.find(plain, "Renown Rank (%d+) %((.-)%), (%d+) renown%. Maximum")
+    if r2 then
+        rank, title, total = tonumber(r2), t2, tonumber(p2)
+        maxed = true
+        available = true
+        Refresh()
+        return true
+    end
+
+    return false
+end
+
+-- Hide our own status replies from every chat frame
+local Original_ChatFrame_OnEvent = ChatFrame_OnEvent
+function ChatFrame_OnEvent(event)
+    if event == "CHAT_MSG_SYSTEM" and pendingSuppress > 0 and arg1 then
+        local plain = string.gsub(arg1, "|c%x%x%x%x%x%x%x%x", "")
+        plain = string.gsub(plain, "|r", "")
+        if string.find(plain, "^%[Renown%] " .. UnitName("player") .. ": Renown Rank") then
+            return
+        end
+    end
+    Original_ChatFrame_OnEvent(event)
+end
+
+local function InBattleground()
+    for i = 1, MAX_BATTLEFIELD_QUEUES or 3 do
+        local status = GetBattlefieldStatus(i)
+        if status == "active" then return true end
+    end
+    return false
+end
+
+-- ---------------------------------------------------------------- events
+bar:RegisterEvent("VARIABLES_LOADED")
+bar:RegisterEvent("PLAYER_ENTERING_WORLD")
+bar:RegisterEvent("CHAT_MSG_SYSTEM")
+bar:RegisterEvent("CHAT_MSG_COMBAT_HONOR_GAIN")
+bar:RegisterEvent("PLAYER_PVP_KILLS_CHANGED")
+bar:RegisterEvent("UPDATE_BATTLEFIELD_STATUS")
+bar:RegisterEvent("UPDATE_BATTLEFIELD_SCORE")
+
+bar:SetScript("OnEvent", function()
+    if event == "VARIABLES_LOADED" then
+        RestorePosition()
+        if RenownBarDB.hidden then bar:Hide() end
+    elseif event == "PLAYER_ENTERING_WORLD" then
+        QueryLater(4)
+    elseif event == "CHAT_MSG_SYSTEM" then
+        if ParseStatus(arg1) then
+            if pendingSuppress > 0 then pendingSuppress = pendingSuppress - 1 end
+        elseif arg1 and string.find(arg1, "Renown") and string.find(arg1, "You have reached") then
+            QueryLater(1)
+        elseif pendingSuppress > 0 and arg1 and (string.find(arg1, "no such command") or string.find(arg1, "no such subcommand")) then
+            pendingSuppress = pendingSuppress - 1
+            available = false
+            text:SetText("Renown: server module not found")
+        end
+    elseif event == "CHAT_MSG_COMBAT_HONOR_GAIN" or event == "PLAYER_PVP_KILLS_CHANGED" then
+        QueryLater(2)
+    elseif event == "UPDATE_BATTLEFIELD_STATUS" or event == "UPDATE_BATTLEFIELD_SCORE" then
+        QueryLater(3)
+    end
+end)
+
+bar:SetScript("OnUpdate", function()
+    local now = GetTime()
+
+    if pendingSuppress > 0 and queryDeadline > 0 and now > queryDeadline then
+        pendingSuppress = 0
+        queryDeadline = 0
+    end
+
+    if delayedQueryAt and now >= delayedQueryAt then
+        delayedQueryAt = nil
+        if available ~= false then Query(true) end
+    end
+
+    pollTimer = pollTimer + arg1
+    local interval = InBattleground() and BG_POLL_INTERVAL or WORLD_POLL_INTERVAL
+    if pollTimer >= interval then
+        pollTimer = 0
+        if available ~= false then Query() end
+    end
+end)
+
+-- ---------------------------------------------------------------- slash command
+SLASH_RENOWNBAR1 = "/renownbar"
+SlashCmdList["RENOWNBAR"] = function(msg)
+    msg = string.lower(msg or "")
+    if msg == "hide" then
+        bar:Hide(); RenownBarDB.hidden = true
+    elseif msg == "show" then
+        bar:Show(); RenownBarDB.hidden = nil
+    elseif msg == "reset" then
+        RenownBarDB.point = nil; RestorePosition()
+    elseif msg == "refresh" then
+        available = nil; Query(true)
+    else
+        DEFAULT_CHAT_FRAME:AddMessage("|cffffd100RenownBar:|r /renownbar show | hide | reset | refresh  (shift-drag the bar to move it)")
+    end
+end
