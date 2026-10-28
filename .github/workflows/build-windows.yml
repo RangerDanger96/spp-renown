@@ -1,0 +1,122 @@
+name: Build mangosd (SPP Classics Vanilla + Renown)
+
+# Rebuilds the exact server version used by SPP Classics V2 (core commit a4e22a9, 2026-10-11)
+# with the same modules, plus the Renown module from this repository.
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'cmangos-renown/**'
+      - '.github/workflows/**'
+
+env:
+  BUILD_TYPE: RelWithDebInfo
+  BOOST_VERSION: "1.86.0"
+  BOOST_TOOLSET: "msvc"
+  CORE_REPO: celguar/mangos-classic
+  CORE_SHA: a4e22a918018b4a9b364e5985b8311acad98f5e4
+  PLAYERBOTS_SHA: da4419afc44f97bb950ca2ebccc3f29a902a3fab
+  MODULES_SHA: f917cf5338d4eae191cb45fa6928db6941154670
+  BUILD_OPTIONS: >-
+    -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=TRUE -DBUILD_EXTRACTORS=OFF -DBUILD_PLAYERBOTS=ON -DBUILD_AHBOT=ON
+    -DBUILD_GIT_ID=ON -DBUILD_MODULES=ON -DBUILD_MODULE_ACHIEVEMENTS=ON -DBUILD_MODULE_DUALSPEC=ON
+    -DBUILD_MODULE_HARDCORE=ON -DBUILD_MODULE_IMMERSIVE=ON -DBUILD_MODULE_TRANSMOG=ON -DBUILD_MODULE_BOOST=ON
+    -DBUILD_MODULE_BARBER=ON -DBUILD_MODULE_TRAININGDUMMIES=ON -DBUILD_MODULE_BALANCING=ON -DBUILD_MODULE_RENOWN=ON
+
+jobs:
+  build:
+    runs-on: windows-2022
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout this repository (Renown module)
+        uses: actions/checkout@v4
+        with:
+          path: renown-repo
+
+      - name: Checkout server core (pinned)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.CORE_REPO }}
+          ref: ${{ env.CORE_SHA }}
+          path: core
+
+      - name: Checkout playerbots (pinned)
+        uses: actions/checkout@v4
+        with:
+          repository: cmangos/playerbots
+          ref: ${{ env.PLAYERBOTS_SHA }}
+          path: core/src/modules/PlayerBots
+
+      - name: Checkout module framework (pinned)
+        uses: actions/checkout@v4
+        with:
+          repository: davidonete/cmangos-modules
+          ref: ${{ env.MODULES_SHA }}
+          path: deps/modules
+
+      - { name: immersive, uses: actions/checkout@v4, with: { repository: flekz-games/cmangos-immersive, ref: c5e450a9c6cadf152e39ace18149cd1bc66b066a, path: deps/immersive } }
+      - { name: achievements, uses: actions/checkout@v4, with: { repository: flekz-games/cmangos-achievements, ref: 70efae53ed1766b6d29153cf3706c57b7d068fef, path: deps/achievements } }
+      - { name: hardcore, uses: actions/checkout@v4, with: { repository: flekz-games/cmangos-hardcore, ref: fe5033afe516f10501bea515d1b8e8b4dd0933fa, path: deps/hardcore } }
+      - { name: dualspec, uses: actions/checkout@v4, with: { repository: flekz-games/cmangos-dualspec, ref: b211cbab0ee6767a065e0817507aaaa045550651, path: deps/dualspec } }
+      - { name: transmog, uses: actions/checkout@v4, with: { repository: flekz-games/cmangos-transmog, ref: 0abf98b38e80724b5a2847b029ccf72e09d98ef2, path: deps/transmog } }
+      - { name: boost, uses: actions/checkout@v4, with: { repository: celguar/cmangos-boost, ref: 1950c42156109df91e6c3d7b8f349652be600e73, path: deps/boost } }
+      - { name: barber, uses: actions/checkout@v4, with: { repository: celguar/cmangos-barber, ref: 5f214bebabfd147a150133986756b57540d5de0e, path: deps/barber } }
+      - { name: trainingdummies, uses: actions/checkout@v4, with: { repository: flekz-games/cmangos-trainingdummies, ref: d00323521680b76eebbe03d9c498c84ec85e7bbf, path: deps/trainingdummies } }
+      - { name: balancing, uses: actions/checkout@v4, with: { repository: flekz-games/cmangos-balancing, ref: ca556e406bdfd97cfcbcad4f171573d2d44776f7, path: deps/balancing } }
+
+      - name: Register the Renown module
+        shell: bash
+        run: |
+          # Must be listed before the MODULES entry so the module loader registers it
+          sed -i 's#^MODULES=#RENOWN=https://github.com/${{ github.repository }}.git\nMODULES=#' deps/modules/modules.conf
+          cat deps/modules/modules.conf
+          grep -q '^RENOWN=' deps/modules/modules.conf
+
+      - name: Install Boost
+        uses: MarkusJx/install-boost@v2.5.1
+        id: install-boost
+        with:
+          boost_version: ${{ env.BOOST_VERSION }}
+          toolset: ${{ env.BOOST_TOOLSET }}
+
+      - name: Configure
+        shell: bash
+        env:
+          BOOST_ROOT: ${{ steps.install-boost.outputs.BOOST_ROOT }}
+        run: |
+          W="$(cygpath -m "$GITHUB_WORKSPACE")"
+          cmake ${{ env.BUILD_OPTIONS }} \
+            -DFETCHCONTENT_SOURCE_DIR_PLAYERBOTS="$W/core/src/modules/PlayerBots" \
+            -DFETCHCONTENT_SOURCE_DIR_MODULES="$W/deps/modules" \
+            -DFETCHCONTENT_SOURCE_DIR_IMMERSIVE="$W/deps/immersive" \
+            -DFETCHCONTENT_SOURCE_DIR_ACHIEVEMENTS="$W/deps/achievements" \
+            -DFETCHCONTENT_SOURCE_DIR_HARDCORE="$W/deps/hardcore" \
+            -DFETCHCONTENT_SOURCE_DIR_DUALSPEC="$W/deps/dualspec" \
+            -DFETCHCONTENT_SOURCE_DIR_TRANSMOG="$W/deps/transmog" \
+            -DFETCHCONTENT_SOURCE_DIR_BOOST="$W/deps/boost" \
+            -DFETCHCONTENT_SOURCE_DIR_BARBER="$W/deps/barber" \
+            -DFETCHCONTENT_SOURCE_DIR_TRAININGDUMMIES="$W/deps/trainingdummies" \
+            -DFETCHCONTENT_SOURCE_DIR_BALANCING="$W/deps/balancing" \
+            -DFETCHCONTENT_SOURCE_DIR_RENOWN="$W/renown-repo/cmangos-renown" \
+            -B "$W/build" -S "$W/core"
+
+      - name: Build
+        run: cmake --build build --config ${{ env.BUILD_TYPE }} --parallel 4
+
+      - name: Package
+        shell: bash
+        run: |
+          mkdir -p out
+          cp -r "build/bin/x64_${{ env.BUILD_TYPE }}/." out/
+          cp build/src/modules/renown/renown.conf.dist out/ 2>/dev/null || find build -name renown.conf.dist -exec cp {} out/ \;
+          cp renown-repo/sql/*.sql out/ 2>/dev/null || true
+          ls -la out
+
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: mangosd-renown-${{ github.run_number }}
+          path: out
+          retention-days: 30

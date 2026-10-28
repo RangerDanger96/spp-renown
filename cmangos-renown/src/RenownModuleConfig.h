@@ -1,0 +1,52 @@
+#ifndef CMANGOS_MODULE_RENOWN_CONFIG_H
+#define CMANGOS_MODULE_RENOWN_CONFIG_H
+
+#include "ModuleConfig.h"
+#include "Platform/Define.h"
+
+#include <vector>
+
+namespace cmangos_module
+{
+    class RenownModuleConfig : public ModuleConfig
+    {
+    public:
+        RenownModuleConfig();
+        bool OnLoad() override;
+
+        // Total renown points required to reach a rank (rank 1 = 0 points)
+        uint32 GetPointsForRank(uint32 rank) const;
+        // Rank for a given total of renown points
+        uint32 GetRankForPoints(uint32 points) const;
+
+    public:
+        bool enabled;
+        bool botsEarnRenown;
+        uint32 maxRank;
+        float rankBase;
+        float rankExponent;
+        float rate;
+        uint32 announceEvery;
+
+        uint32 pointsHonorableKill;
+        uint32 pointsKillingBlow;
+        uint32 pointsWorldKill;
+        uint32 pointsFlagCapture;
+        uint32 pointsFlagReturn;
+        uint32 pointsBaseAssault;
+        uint32 pointsBaseDefend;
+        uint32 pointsGraveyardAssault;
+        uint32 pointsGraveyardDefend;
+        uint32 pointsTowerAssault;
+        uint32 pointsTowerDefend;
+        uint32 pointsSecondaryObjective;
+        uint32 pointsWin;
+        uint32 pointsLoss;
+
+        std::vector<uint32> insigniaRanks;
+        std::vector<uint32> insigniaItems;
+        std::vector<uint32> quartermasters;
+    };
+}
+
+#endif
