@@ -348,3 +348,39 @@ INSERT INTO creature (guid,id,map,spawnMask,position_x,position_y,position_z,ori
 (9100321,190105,0,1,1666.202,1667.513,141.297,4.5284,25,25,0,0), -- Deathknell wsg
 (9100322,190106,0,1,1663.084,1667.434,141.051,4.9473,25,25,0,0), -- Deathknell ab
 (9100323,190107,0,1,1660.269,1666.093,141.016,5.3662,25,25,0,0); -- Deathknell av
+
+-- All-class trainer: trains every class's trainer spells (each player only sees their own class), no class check
+DELETE FROM creature_template WHERE Entry IN (190832,190833);
+DELETE FROM npc_trainer WHERE entry IN (190832,190833);
+DROP TEMPORARY TABLE IF EXISTS tmp_ct;
+CREATE TEMPORARY TABLE tmp_ct SELECT * FROM creature_template WHERE Entry=913;
+UPDATE tmp_ct SET Entry=190832, Name='Master-at-Arms Callen', SubName='All-Class Trainer', NpcFlags=16, GossipMenuId=0, TrainerType=2, TrainerClass=0, TrainerRace=0, TrainerTemplateId=0, TrainerSpell=0;
+INSERT INTO creature_template SELECT * FROM tmp_ct;
+DROP TEMPORARY TABLE IF EXISTS tmp_ct;
+CREATE TEMPORARY TABLE tmp_ct SELECT * FROM creature_template WHERE Entry=3153;
+UPDATE tmp_ct SET Entry=190833, Name='Master-at-Arms Grukk', SubName='All-Class Trainer', NpcFlags=16, GossipMenuId=0, TrainerType=2, TrainerClass=0, TrainerRace=0, TrainerTemplateId=0, TrainerSpell=0;
+INSERT INTO creature_template SELECT * FROM tmp_ct;
+DROP TEMPORARY TABLE IF EXISTS tmp_ct;
+DROP TEMPORARY TABLE IF EXISTS tmp_ts;
+CREATE TEMPORARY TABLE tmp_ts SELECT spell, MIN(spellcost) spellcost, MIN(reqskill) reqskill, MIN(reqskillvalue) reqskillvalue, MIN(reqlevel) reqlevel, MIN(condition_id) condition_id FROM (SELECT n.spell,n.spellcost,n.reqskill,n.reqskillvalue,n.reqlevel,n.condition_id FROM npc_trainer n JOIN creature_template c ON c.Entry=n.entry WHERE c.TrainerType=0 AND c.TrainerClass>0 UNION ALL SELECT t.spell,t.spellcost,t.reqskill,t.reqskillvalue,t.reqlevel,t.condition_id FROM npc_trainer_template t JOIN creature_template c ON c.TrainerTemplateId=t.entry WHERE c.TrainerType=0 AND c.TrainerClass>0) x GROUP BY spell;
+INSERT INTO npc_trainer (entry,spell,spellcost,reqskill,reqskillvalue,reqlevel,condition_id) SELECT 190832,spell,spellcost,reqskill,reqskillvalue,reqlevel,condition_id FROM tmp_ts;
+INSERT INTO npc_trainer (entry,spell,spellcost,reqskill,reqskillvalue,reqlevel,condition_id) SELECT 190833,spell,spellcost,reqskill,reqskillvalue,reqlevel,condition_id FROM tmp_ts;
+DROP TEMPORARY TABLE IF EXISTS tmp_ts;
+
+-- War Boards and all-class trainers at the hubs (boards: gameobjects 5400110-5400115, trainers: creatures 9100330-9100335)
+DELETE FROM gameobject WHERE guid BETWEEN 5400110 AND 5400119;
+DELETE FROM creature WHERE guid BETWEEN 9100330 AND 9100339;
+INSERT INTO gameobject (guid,id,map,spawnMask,position_x,position_y,position_z,orientation,rotation0,rotation1,rotation2,rotation3,spawntimesecsmin,spawntimesecsmax) VALUES
+(5400110,190803,0,1,-8946.429,-139.115,83.685,2.0595,0,0,0.857167,0.515038,120,120), -- Northshire Valley
+(5400111,190803,0,1,-6237.520,324.075,382.638,1.9535,0,0,0.828672,0.559734,120,120), -- Coldridge Valley
+(5400112,190803,1,1,10308.982,824.330,1326.542,1.2566,0,0,0.587784,0.809018,120,120), -- Shadowglen
+(5400113,190803,1,1,-614.997,-4258.292,39.006,2.0595,0,0,0.857167,0.515038,120,120), -- Valley of Trials
+(5400114,190803,1,1,-2914.059,-264.602,53.585,2.0595,0,0,0.857167,0.515038,120,120), -- Camp Narache
+(5400115,190803,0,1,1671.360,1663.829,139.843,3.6557,0,0,0.967137,-0.254256,120,120); -- Deathknell
+INSERT INTO creature (guid,id,map,spawnMask,position_x,position_y,position_z,orientation,spawntimesecsmin,spawntimesecsmax,spawndist,MovementType) VALUES
+(9100330,190832,0,1,-8946.429,-125.871,83.433,4.2237,25,25,0,0), -- Northshire Valley
+(9100331,190832,0,1,-6236.118,337.245,383.167,4.1177,25,25,0,0), -- Coldridge Valley
+(9100332,190832,1,1,10318.509,833.530,1326.426,3.4208,25,25,0,0), -- Shadowglen
+(9100333,190833,1,1,-614.997,-4245.048,39.006,4.2237,25,25,0,0), -- Valley of Trials
+(9100334,190833,1,1,-2914.059,-251.358,52.999,4.2237,25,25,0,0), -- Camp Narache
+(9100335,190833,0,1,1658.120,1663.491,141.126,5.8200,25,25,0,0); -- Deathknell

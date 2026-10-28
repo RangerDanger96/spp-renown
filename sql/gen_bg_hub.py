@@ -116,5 +116,52 @@ w("INSERT INTO creature (guid,id,map,spawnMask,position_x,position_y,position_z,
 for k,row in enumerate(rows):
     body,cmt=row.split(' -- ')
     w(body+(";" if k==len(rows)-1 else ",")+" -- "+cmt)
+
+# ---- War Board and an all-class trainer at every hub (left and right ends of the arc)
+import math as _m
+from height import load as _load, height as _height
+_AREAS=[('Northshire Valley',0,'A','0004832',-8949.95,-132.493,0.0),('Coldridge Valley',0,'A','0004331',-6240.32,331.033,6.17716),
+        ('Shadowglen',1,'A','0011230',10311.3,831.463,5.48033),('Valley of Trials',1,'H','0013339',-618.518,-4251.67,0.0),
+        ('Camp Narache',1,'H','0013732',-2917.58,-257.98,0.0),('Deathknell',0,'H','0002828',1664.83,1660.14,1.59626)]
+w("")
+w("-- All-class trainer: trains every class's trainer spells (each player only sees their own class), no class check")
+w("DELETE FROM creature_template WHERE Entry IN (190832,190833);")
+w("DELETE FROM npc_trainer WHERE entry IN (190832,190833);")
+for entry,src,name in [(190832,913,'Master-at-Arms Callen'),(190833,3153,'Master-at-Arms Grukk')]:
+    w("DROP TEMPORARY TABLE IF EXISTS tmp_ct;")
+    w(f"CREATE TEMPORARY TABLE tmp_ct SELECT * FROM creature_template WHERE Entry={src};")
+    w(f"UPDATE tmp_ct SET Entry={entry}, Name='{name}', SubName='All-Class Trainer', NpcFlags=16, GossipMenuId=0, TrainerType=2, TrainerClass=0, TrainerRace=0, TrainerTemplateId=0, TrainerSpell=0;")
+    w("INSERT INTO creature_template SELECT * FROM tmp_ct;")
+w("DROP TEMPORARY TABLE IF EXISTS tmp_ct;")
+w("DROP TEMPORARY TABLE IF EXISTS tmp_ts;")
+w("CREATE TEMPORARY TABLE tmp_ts SELECT spell, MIN(spellcost) spellcost, MIN(reqskill) reqskill, MIN(reqskillvalue) reqskillvalue, MIN(reqlevel) reqlevel, MIN(condition_id) condition_id FROM ("
+  "SELECT n.spell,n.spellcost,n.reqskill,n.reqskillvalue,n.reqlevel,n.condition_id FROM npc_trainer n JOIN creature_template c ON c.Entry=n.entry WHERE c.TrainerType=0 AND c.TrainerClass>0 "
+  "UNION ALL SELECT t.spell,t.spellcost,t.reqskill,t.reqskillvalue,t.reqlevel,t.condition_id FROM npc_trainer_template t JOIN creature_template c ON c.TrainerTemplateId=t.entry WHERE c.TrainerType=0 AND c.TrainerClass>0"
+  ") x GROUP BY spell;")
+for entry in (190832,190833):
+    w(f"INSERT INTO npc_trainer (entry,spell,spellcost,reqskill,reqskillvalue,reqlevel,condition_id) SELECT {entry},spell,spellcost,reqskill,reqskillvalue,reqlevel,condition_id FROM tmp_ts;")
+w("DROP TEMPORARY TABLE IF EXISTS tmp_ts;")
+w("")
+w("-- War Boards and all-class trainers at the hubs (boards: gameobjects 5400110-5400115, trainers: creatures 9100330-9100335)")
+w("DELETE FROM gameobject WHERE guid BETWEEN 5400110 AND 5400119;")
+w("DELETE FROM creature WHERE guid BETWEEN 9100330 AND 9100339;")
+gos=[]; crs=[]
+for k,(name,m,side,f,cx,cy,o) in enumerate(_AREAS):
+    g=_load('/root/wow/maps/%s.map'%f)
+    for role,deg in (('board',-62),('trainer',62)):
+        a=o+_m.radians(deg); d=7.5
+        x=cx+d*_m.cos(a); y=cy+d*_m.sin(a); z=_height(g,x,y)
+        face=_m.atan2(cy-y,cx-x)%(2*_m.pi)
+        if role=='board':
+            gos.append(f"({5400110+k},190803,{m},1,{x:.3f},{y:.3f},{z+0.05:.3f},{face:.4f},0,0,{_m.sin(face/2):.6f},{_m.cos(face/2):.6f},120,120) -- {name}")
+        else:
+            crs.append(f"({9100330+k},{190832 if side=='A' else 190833},{m},1,{x:.3f},{y:.3f},{z+0.05:.3f},{face:.4f},25,25,0,0) -- {name}")
+w("INSERT INTO gameobject (guid,id,map,spawnMask,position_x,position_y,position_z,orientation,rotation0,rotation1,rotation2,rotation3,spawntimesecsmin,spawntimesecsmax) VALUES")
+for i,r in enumerate(gos):
+    body,c=r.split(' -- '); w(body+(";" if i==len(gos)-1 else ",")+" -- "+c)
+w("INSERT INTO creature (guid,id,map,spawnMask,position_x,position_y,position_z,orientation,spawntimesecsmin,spawntimesecsmax,spawndist,MovementType) VALUES")
+for i,r in enumerate(crs):
+    body,c=r.split(' -- '); w(body+(";" if i==len(crs)-1 else ",")+" -- "+c)
+
 open('/root/wow/build/zz_bg_hub.sql','w',newline='\r\n').write("\n".join(L)+"\n")
 print(len(L),"lines")
