@@ -8,7 +8,14 @@ A Warhammer Online style **Renown** system for an SPP Classics V2 (CMaNGOS Class
 - Rank-up messages and server-wide announcements every 5 ranks (real players only).
 - Renown Insignias at ranks 5/10/15/20/25/30 unlock tiers of Warsong Gulch reward gear at the
   Battleground Quartermaster, no reputation grind.
-- Commands: `.renown info`, `.renown top`, GM: `.renown add <points> [name]`, `.renown set <rank> [name]`.
+- **Renown points are a currency.** Rank comes from lifetime renown; spendable points buy quartermaster gear
+  (prices in `custom_renown_vendor`). Consumables keep their gold price.
+- **Low-level PvP gear:** Recruit's set (levels 1-9, open) and Skirmisher's set (10-19, tier 1).
+- **7 battleground brackets:** 1-9, 10-19, 20-29, 30-39, 40-49, 50-59, 60 (core patch). Warsong Gulch and
+  Arathi Basin open at level 1; Alterac Valley stays 51-60.
+- **Bolster:** inside a battleground, players get the base stats, health and mana of their bracket's top level.
+- Commands: `.renown info`, `.renown top`, GM: `.renown add <points> [name]`, `.renown set <rank> [name]`,
+  `.renown give <points> [name]` (spendable only), admin: `.renown reload`.
 
 ## Contents
 
@@ -18,6 +25,8 @@ A Warhammer Online style **Renown** system for an SPP Classics V2 (CMaNGOS Class
 | `sql/zz_bg_hub.sql` | Battlemasters + Battleground Quartermaster at every starting area |
 | `sql/zz_renown.sql` | Insignia items and the quartermaster's tiered Renown rewards |
 | `sql/renown.conf` | Renown settings (copy next to `mangosd.conf`) |
+| `patches/` | Small patches to the core, playerbots and module framework (brackets, low-level bot queueing, vendor hooks) |
+| `addon/RenownBar/` | Client addon: Renown bar, spendable points, Renown prices in the vendor window |
 | `.github/workflows/build-windows.yml` | Builds `mangosd.exe` for Windows, pinned to the exact SPP server version |
 
 ## Build
