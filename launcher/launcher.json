@@ -1,0 +1,10 @@
+{
+  "serverName": "Renown Realm",
+  "address": "10.229.14.74",
+  "port": 3724,
+  "zerotierNetwork": "",
+  "cacheVersion": 1,
+  "clientFilesUrl": "https://github.com/RangerDanger96/spp-renown/releases/download/client-latest/client-files.zip",
+  "clientVersionUrl": "https://github.com/RangerDanger96/spp-renown/releases/download/client-latest/client-version.txt",
+  "news": "Welcome to the Renown Realm!\n\n- Barrens Front: tier 1 RvR lake between the Crossroads and Northwatch Hold (levels 1-19)\n- War boards with daily and weekly orders at both front bases\n- Renown ranks, loot bags, kill streaks and bounties\n- Human Hunters\n- Field mount for levels 1-39 (/fm)\n\nClick the banner button in game for the PvP panel."
+}

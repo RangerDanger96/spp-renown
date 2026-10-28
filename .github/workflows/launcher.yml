@@ -1,0 +1,59 @@
+name: Build launcher and client files
+
+# Builds RenownLauncher.exe and the client files (addons + client patch) the launcher installs,
+# and publishes them on the "client-latest" release (overwritten each time).
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'launcher/**'
+      - 'addon/**'
+      - 'client/**'
+      - '.github/workflows/launcher.yml'
+
+jobs:
+  build:
+    runs-on: windows-2022
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build launcher
+        shell: bash
+        run: |
+          set -o pipefail
+          dotnet build launcher/RenownLauncher.csproj -c Release -nologo 2>&1 | tee launcher-build.log
+
+      - name: Report compile errors
+        if: failure()
+        shell: bash
+        run: |
+          grep -E "error CS[0-9]+|error MSB|error NU" launcher-build.log | sort -u | head -40 | while IFS= read -r line; do echo "::error::$line"; done
+
+      - name: Package client files
+        shell: bash
+        run: |
+          mkdir -p pkg/Interface/AddOns pkg/Data out
+          cp -r addon/RenownBar pkg/Interface/AddOns/
+          cp -r addon/Mangosbot pkg/Interface/AddOns/
+          cp client/patch-3.MPQ pkg/Data/
+          cd pkg && 7z a -tzip ../out/client-files.zip . > /dev/null && cd ..
+          echo "${GITHUB_SHA}" > out/client-version.txt
+          cp launcher/bin/Release/net48/RenownLauncher.exe out/
+          ls -la out
+
+      - name: Publish (client-latest)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: client-latest
+          name: Launcher and client files (latest)
+          make_latest: false
+          body: |
+            RenownLauncher.exe: give this to your friends.
+            client-files.zip / client-version.txt: downloaded by the launcher automatically.
+          files: |
+            out/RenownLauncher.exe
+            out/client-files.zip
+            out/client-version.txt
