@@ -28,7 +28,7 @@ jobs:
   build:
     runs-on: windows-2022
     permissions:
-      contents: read
+      contents: write   # publishes the finished build as a GitHub Release
     steps:
       - name: Checkout this repository (Renown module)
         uses: actions/checkout@v4
@@ -120,3 +120,16 @@ jobs:
           name: mangosd-renown-${{ github.run_number }}
           path: out
           retention-days: 30
+
+      - name: Zip build
+        shell: bash
+        run: 7z a -tzip "mangosd-renown-${{ github.run_number }}.zip" ./out/*
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Server build ${{ github.run_number }}
+          body: "mangosd.exe for SPP Classics V2 (Vanilla) with the Renown module. Commit ${{ github.sha }}."
+          files: mangosd-renown-${{ github.run_number }}.zip
+          make_latest: true
