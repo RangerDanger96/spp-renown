@@ -30,11 +30,26 @@
 #include <cmath>
 #include <sstream>
 
+#ifdef ENABLE_PLAYERBOTS
+// Defined in the playerbots patch (RandomPlayerbotMgr.cpp), compiled with the playerbots' own settings
+bool RenownBotFrontMode(Player* bot, bool on);
+#endif
+
 namespace cmangos_module
 {
     namespace
     {
+        void RvRBotFrontMode(Player* bot, bool on)
+        {
+#ifdef ENABLE_PLAYERBOTS
+            RenownBotFrontMode(bot, on);
+#else
+            (void)bot; (void)on;
+#endif
+        }
+
         const uint32 RVR_MAP = 1;
+        const uint16 RVR_EVENT_WILDLIFE = 1112;         // active = the lake's wildlife and centaurs are despawned
         const uint16 RVR_EVENT_BASE = 1100;            // + objective * 3 + state (0 neutral, 1 alliance, 2 horde)
         const uint16 RVR_EVENT_SIEGE_NORTHWATCH = 1110; // alliance commander out (horde attacks)
         const uint16 RVR_EVENT_SIEGE_CROSSROADS = 1111; // horde commander out (alliance attacks)
@@ -110,6 +125,13 @@ namespace cmangos_module
         }
 
         RvRReset();
+
+        // Clear the lake of wildlife so low levels fight each other, not raptors (zz_rvr.sql links the spawns)
+        if (sGameEventMgr.IsValidEvent(RVR_EVENT_WILDLIFE) && !sGameEventMgr.IsActiveEvent(RVR_EVENT_WILDLIFE))
+        {
+            sGameEventMgr.StartEvent(RVR_EVENT_WILDLIFE, true);
+        }
+
         sLog.outString("Renown: the Barrens Front RvR lake is open");
     }
 
@@ -536,6 +558,65 @@ namespace cmangos_module
         }
     }
 
+    // ------------------------------------------------------------------ front bots
+    // The front's share of bots stop questing/travelling while they are in the Barrens (otherwise they wander off
+    // to Ratchet and their quest hubs) and are walked from objective to objective instead.
+    void RenownModule::RvRDirectBots(const std::vector<Player*>& players)
+    {
+        const RenownModuleConfig* config = GetConfig();
+        const uint32 share = std::min<uint32>(config->rvrBotShare, 100);
+        for (Player* bot : players)
+        {
+            if (bot->isRealPlayer())
+            {
+                continue;
+            }
+
+            const uint32 botId = bot->GetObjectGuid().GetCounter();
+            const bool frontBot = share && botId % 100 < share && bot->GetLevel() <= config->rvrMaxLevel &&
+                                  !bot->InBattleGround() && bot->GetMapId() == RVR_MAP &&
+                                  (RvRIsMember(botId) || bot->GetZoneId() == 17);
+            if (!frontBot)
+            {
+                if (m_rvrDirectedBots.erase(botId))
+                {
+                    RvRBotFrontMode(bot, false);
+                }
+                continue;
+            }
+
+            m_rvrDirectedBots.insert(botId);
+            RvRBotFrontMode(bot, true);
+
+            if (!bot->IsAlive() || bot->IsInCombat() || bot->IsTaxiFlying() || bot->GetGroup() ||
+                bot->GetMotionMaster()->GetCurrentMovementGeneratorType() != IDLE_MOTION_TYPE || urand(0, 2))
+            {
+                continue;   // busy, or give it a moment before the next order (about every 15 seconds)
+            }
+
+            // Mostly objectives the team doesn't hold, sometimes one of its own to defend; siege when it holds all three
+            std::vector<Point> targets;
+            for (const RvRObjective& objective : m_rvrObjectives)
+            {
+                if (objective.owner != bot->GetTeam() || !urand(0, 3))
+                {
+                    targets.push_back({ objective.x, objective.y, objective.z });
+                }
+            }
+
+            if (targets.empty())
+            {
+                targets.push_back(bot->GetTeam() == ALLIANCE ? RVR_HORDE_COMMAND : RVR_ALLIANCE_COMMAND);
+            }
+
+            const Point& target = targets[urand(0, uint32(targets.size() - 1))];
+            const float angle = frand(0.0f, 6.28f), dist = frand(3.0f, 15.0f);
+            float x = target.x + std::cos(angle) * dist, y = target.y + std::sin(angle) * dist, z = target.z;
+            bot->UpdateAllowedPositionZ(x, y, z);
+            bot->GetMotionMaster()->MovePoint(0, x, y, z);
+        }
+    }
+
     // ------------------------------------------------------------------ field mounts
     uint32 RenownModule::FieldMountSpell(const Player* player)
     {
@@ -898,6 +979,7 @@ namespace cmangos_module
             {
                 m_rvrMountTimer = 0;
                 UpdateBotMounts(players);
+                RvRDirectBots(players);
             }
 
             m_rvrBotTimer += diff;

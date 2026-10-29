@@ -110,6 +110,7 @@ namespace cmangos_module
         static uint32 FieldMountSpell(const Player* player);
         bool CastFieldMount(Player* player, bool instant);
         void UpdateBotMounts(const std::vector<Player*>& players);
+        void RvRDirectBots(const std::vector<Player*>& players);
         bool HandleReloadCommand(WorldSession* session, const std::string& args);
 
         void LoadVendorCosts();
@@ -195,6 +196,7 @@ namespace cmangos_module
         uint32 m_rvrStatusTimer = 0;
         uint32 m_rvrBotTimer = 0;
         uint32 m_rvrMountTimer = 0;
+        std::unordered_set<uint32> m_rvrDirectedBots;
         uint32 m_rvrHoldTeam = 0;
         uint32 m_rvrHoldTime = 0;
         uint32 m_rvrSiegeTeam = 0;                       // attacking team during a siege

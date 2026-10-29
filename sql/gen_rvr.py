@@ -230,3 +230,30 @@ q("INSERT INTO gameobject_involvedrelation (id,quest) VALUES "+",".join(f"(19080
 with open('/root/rvr/zz_rvr.sql','a',newline='\r\n') as f:
     f.write("\n".join(Q)+"\n")
 print(len(qrows),'quests')
+
+# ------------------------------------------------------------------ lake wildlife (event 1112)
+# While event 1112 is active (started by the Renown module) the natural mob spawns inside the lake are removed:
+# beasts, centaurs, silithid... Town NPCs, guards (Crossroads, Northwatch/Theramore), quest givers and critters stay.
+# Computed in the server's own database (distance to the lake path), so it works whatever the spawn guids are.
+LAKE=[(-680,-2740),(-849,-2858),(-1255,-3150),(-1790,-3280),(-1965,-3395)]
+def segsql(a,b,r=200):
+    ax,ay=a; bx,by=b; dx,dy=bx-ax,by-ay; L=dx*dx+dy*dy
+    t=f"GREATEST(0,LEAST(1,((c.position_x-({ax}))*({dx})+(c.position_y-({ay}))*({dy}))/{L}))"
+    return f"(POW(c.position_x-({ax})-{t}*({dx}),2)+POW(c.position_y-({ay})-{t}*({dy}),2) <= {r*r})"
+cond=" OR ".join(segsql(LAKE[i],LAKE[i+1]) for i in range(len(LAKE)-1))
+S=[]
+S.append("")
+S.append("-- ============================================================")
+S.append("-- Barrens Front: lake wildlife removed while game event 1112 is active (the Renown module starts it)")
+S.append("-- ============================================================")
+S.append("DELETE FROM game_event_creature WHERE event=-1112;")
+S.append("DELETE FROM game_event WHERE entry=1112;")
+S.append("INSERT INTO game_event (entry,schedule_type,occurence,length,holiday,linkedTo,description) VALUES (1112,0,525600,1,0,0,'Barrens Front: lake wildlife cleared');")
+S.append("INSERT IGNORE INTO game_event_creature (guid,event) SELECT c.guid,-1112 FROM creature c JOIN creature_template t ON t.Entry=c.id "
+         "WHERE c.map=1 AND c.position_x BETWEEN -2300 AND -300 AND c.position_y BETWEEN -3700 AND -2400 "
+         "AND c.id < 190000 AND t.NpcFlags=0 AND t.CreatureType<>8 AND t.Faction NOT IN (85,1077,29,104,126) "
+         "AND c.guid NOT IN (SELECT guid FROM (SELECT guid FROM game_event_creature) e) "
+         "AND c.guid NOT IN (SELECT Guid FROM spawn_group_spawn) "
+         f"AND ({cond});")
+S.append("SELECT 'lake_wildlife_removed', COUNT(*) FROM game_event_creature WHERE event=-1112;")
+with open('/root/rvr/zz_rvr.sql','a',newline='\r\n') as f: f.write("\n".join(S)+"\n")
