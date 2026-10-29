@@ -907,7 +907,8 @@ namespace cmangos_module
     {
         for (Player* player : players)
         {
-            if (player->GetMapId() != RVR_MAP || player->GetZoneId() != 17 || player->IsAlive() ||
+            const bool frontZone = (player->GetMapId() == RVR_MAP && player->GetZoneId() == 17) || (player->GetMapId() == 0 && player->GetZoneId() == 139);
+            if (!frontZone || player->IsAlive() ||
                 !player->HasFlag(PLAYER_FLAGS, PLAYER_FLAGS_GHOST) || !player->GetMap())
             {
                 continue;
@@ -922,7 +923,7 @@ namespace cmangos_module
 
             // Front bots don't wait at the spirit healer on their own (they run back to their corpse), so the wave
             // collects them wherever their ghost is and brings them back at their side's graveyard, like in a battleground
-            bool frontBot = !player->isRealPlayer() && m_rvrDirectedBots.count(player->GetObjectGuid().GetCounter());
+            bool frontBot = !player->isRealPlayer() && (m_rvrDirectedBots.count(player->GetObjectGuid().GetCounter()) || m_t4Directed.count(player->GetObjectGuid().GetCounter()));
             if (!frontBot && !player->isRealPlayer())
             {
                 std::lock_guard<std::mutex> lock(m_frontMutex);
@@ -1074,6 +1075,7 @@ namespace cmangos_module
 
         QuestsUpdate(diff);
         RvRUpdate(diff);
+        T4Update(diff);
     }
 
     void RenownModule::RvRUpdate(uint32 diff)

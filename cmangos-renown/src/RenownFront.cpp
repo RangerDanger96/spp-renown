@@ -179,7 +179,7 @@ namespace cmangos_module
             leads = m_frontWarbands.count(playerId) > 0;
         }
 
-        if (leads && !OnFront(player))
+        if (leads && !OnFront(player) && !(player->GetMapId() == 0 && player->GetZoneId() == 139))
         {
             FrontDismissWarband(playerId, player, true);
         }
@@ -640,7 +640,9 @@ namespace cmangos_module
                 for (auto& band : m_frontWarbands)
                 {
                     Player* leader = sObjectMgr.GetPlayer(ObjectGuid(HIGHGUID_PLAYER, band.first));
-                    if (!leader || !leader->IsInWorld() || (!OnFront(leader) && !RvRIsMember(band.first)) || leader->GetLevel() > GetConfig()->rvrMaxLevel)
+                    const bool barrens = leader && (OnFront(leader) || RvRIsMember(band.first)) && leader->GetLevel() <= GetConfig()->rvrMaxLevel;
+                    const bool plaguelands = leader && leader->IsInWorld() && leader->GetMapId() == 0 && leader->GetZoneId() == 139 && leader->GetLevel() >= GetConfig()->t4MinLevel;
+                    if (!leader || !leader->IsInWorld() || (!barrens && !plaguelands))
                     {
                         dismiss.push_back(band.first);
                         continue;
@@ -1285,6 +1287,10 @@ namespace cmangos_module
             {
                 m_rvrRoster.insert(botId);
             }
+            else if (T4IsMember(botId) && bot->GetLevel() >= GetConfig()->t4MinLevel)
+            {
+                m_t4Roster.insert(botId);
+            }
         }
 
         if (announce && leader && leader->isRealPlayer())
@@ -1325,23 +1331,22 @@ namespace cmangos_module
         handler.PSendSysMessage("Warbands need playerbots.");
         return true;
 #else
-        if (!GetConfig()->rvrEnabled || m_rvrObjectives.size() != 3)
+        const bool onBarrens = GetConfig()->rvrEnabled && m_rvrObjectives.size() == 3 && (RvRIsMember(leaderId) || OnFront(player));
+        const bool onPlaguelands = m_t4Ready && player->GetMapId() == 0 && player->GetZoneId() == 139;
+        if (!onBarrens && !onPlaguelands)
         {
-            handler.PSendSysMessage("The Barrens Front is not available.");
+            handler.PSendSysMessage("|cffffd100[Renown]|r Warbands can only be raised on the Barrens Front (levels 1-%u, /front) or the Plaguelands Front (levels %u-60, /t4).",
+                                    GetConfig()->rvrMaxLevel, GetConfig()->t4MinLevel);
             return true;
         }
 
-        if (!RvRIsMember(leaderId) && !OnFront(player))
+        if ((onBarrens && player->GetLevel() > GetConfig()->rvrMaxLevel) || (onPlaguelands && player->GetLevel() < GetConfig()->t4MinLevel))
         {
-            handler.PSendSysMessage("|cffffd100[Barrens Front]|r Warbands can only be raised on the Barrens Front. Type /front to go there.");
+            handler.PSendSysMessage("|cffffd100[Renown]|r Your level doesn't fit this front.");
             return true;
         }
 
-        if (player->GetLevel() > GetConfig()->rvrMaxLevel)
-        {
-            handler.PSendSysMessage("|cffffd100[Barrens Front]|r Warbands are for levels 1-%u.", GetConfig()->rvrMaxLevel);
-            return true;
-        }
+        std::unordered_set<uint32>& roster = onPlaguelands ? m_t4Roster : m_rvrRoster;
 
         Group* group = player->GetGroup();
         if (group && (group->IsRaidGroup() || group->GetLeaderGuid() != player->GetObjectGuid()))
@@ -1371,7 +1376,7 @@ namespace cmangos_module
                 }
 
                 const uint32 botId = bot->GetObjectGuid().GetCounter();
-                if (!m_rvrRoster.count(botId) || bot->GetLevel() > GetConfig()->rvrMaxLevel)
+                if (!roster.count(botId))
                 {
                     continue;
                 }
@@ -1397,9 +1402,11 @@ namespace cmangos_module
                 continue;
             }
 
-            m_rvrRoster.erase(botId);
+            roster.erase(botId);
             m_rvrBotOrders.erase(botId);
             m_rvrDirectedBots.erase(botId);
+            m_t4Orders.erase(botId);
+            m_t4Directed.erase(botId);
             if (candidate.first > 60.0f)
             {
                 // Ride over: appear beside the leader

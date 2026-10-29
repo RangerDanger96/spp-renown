@@ -78,6 +78,14 @@ namespace cmangos_module
         uint32 rvrSpiritWave;
         uint32 rvrFrontBotsActive;
         uint32 rvrFrontBotsIdle;
+        bool t4Enabled;
+        uint32 t4MinLevel;
+        uint32 t4BotsActive;
+        uint32 t4BotsIdle;
+        uint32 t4SiegeHold;
+        uint32 t4LockMinutes;
+        uint32 t4TickPoints;
+        uint32 t4CapturePoints;
 
         uint32 pointsHonorableKill;
         uint32 pointsKillingBlow;

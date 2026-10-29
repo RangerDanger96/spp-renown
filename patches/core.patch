@@ -287,6 +287,20 @@ index f8ceaef..9334dc2 100644
      }
      else
          value = GetUnitMeleeSkill(target);
+diff --git a/src/game/OutdoorPvP/OutdoorPvPEP.h b/src/game/OutdoorPvP/OutdoorPvPEP.h
+index 3713d90..5bd1319 100644
+--- a/src/game/OutdoorPvP/OutdoorPvPEP.h
++++ b/src/game/OutdoorPvP/OutdoorPvPEP.h
+@@ -217,6 +217,9 @@ class OutdoorPvPEP : public OutdoorPvP
+         void HandleGameObjectCreate(GameObject* go) override;
+         bool HandleGameObjectUse(Player* player, GameObject* go) override;
+ 
++        // SPP Renown: the Plaguelands Front reads the tower owners
++        Team GetTowerOwner(uint32 towerId) const { return towerId < MAX_EP_TOWERS ? m_towerOwner[towerId] : TEAM_NONE; }
++
+     private:
+         // process capture events
+         bool ProcessCaptureEvent(GameObject* go, uint32 towerId, Team team, uint32 newWorldState);
 diff --git a/src/game/Quests/QuestDef.h b/src/game/Quests/QuestDef.h
 index 439d67b..cf11496 100644
 --- a/src/game/Quests/QuestDef.h

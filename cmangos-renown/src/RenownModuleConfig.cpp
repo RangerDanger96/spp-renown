@@ -86,6 +86,14 @@ namespace cmangos_module
     , rvrSpiritWave(30)
     , rvrFrontBotsActive(30)
     , rvrFrontBotsIdle(8)
+    , t4Enabled(true)
+    , t4MinLevel(55)
+    , t4BotsActive(30)
+    , t4BotsIdle(8)
+    , t4SiegeHold(120)
+    , t4LockMinutes(60)
+    , t4TickPoints(15)
+    , t4CapturePoints(60)
     , pointsHonorableKill(10)
     , pointsKillingBlow(5)
     , pointsWorldKill(10)
@@ -167,6 +175,14 @@ namespace cmangos_module
         rvrSpiritWave = config.GetIntDefault("Renown.RvR.SpiritWave", 30);
         rvrFrontBotsActive = config.GetIntDefault("Renown.RvR.FrontBotsActive", 30);
         rvrFrontBotsIdle = config.GetIntDefault("Renown.RvR.FrontBotsIdle", 8);
+        t4Enabled = config.GetBoolDefault("Renown.T4.Enabled", true);
+        t4MinLevel = config.GetIntDefault("Renown.T4.MinLevel", 55);
+        t4BotsActive = config.GetIntDefault("Renown.T4.BotsActive", 30);
+        t4BotsIdle = config.GetIntDefault("Renown.T4.BotsIdle", 8);
+        t4SiegeHold = config.GetIntDefault("Renown.T4.SiegeHold", 120);
+        t4LockMinutes = config.GetIntDefault("Renown.T4.LockMinutes", 60);
+        t4TickPoints = config.GetIntDefault("Renown.T4.TickPoints", 15);
+        t4CapturePoints = config.GetIntDefault("Renown.T4.CapturePoints", 60);
 
         pointsHonorableKill = config.GetIntDefault("Renown.Points.HonorableKill", 10);
         pointsKillingBlow = config.GetIntDefault("Renown.Points.KillingBlow", 5);

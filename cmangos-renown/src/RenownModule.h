@@ -152,6 +152,25 @@ namespace cmangos_module
         void FrontCrier();
         Map* FrontMap(const std::vector<Player*>& members) const;
 
+        // ---- Plaguelands Front (RenownT4.cpp): tier 4 RvR at level 60 on the Eastern Plaguelands towers
+        void OnRewardPlayerAtKill(Player* player, Unit* victim) override;
+        void T4Init();
+        void T4Update(uint32 diff);
+        uint32 T4TowerOwner(uint32 tower) const;
+        uint32 T4OwnedBy(uint32 team) const;
+        bool T4IsMember(uint32 playerId) const { return m_t4Members.count(playerId) > 0; }
+        void T4Enter(Player* player);
+        void T4Leave(Player* player);
+        void T4FX(const std::string& text, uint32 team, uint32 sound);
+        void T4Reinforce(const std::vector<Player*>& players, bool watched);
+        void T4Direct(const std::vector<Player*>& players);
+        void T4StartSiege(uint32 team, const std::vector<Player*>& members);
+        void T4StopSiege(bool announce);
+        void T4Victory(uint32 team, const std::vector<Player*>& members);
+        void T4SetHolder(uint32 team);
+        void T4Stats(ChatHandler& handler);
+        bool HandleT4Command(WorldSession* session, const std::string& args);
+
         void LoadVendorCosts();
 
         // Loot bags
@@ -247,6 +266,17 @@ namespace cmangos_module
         uint32 m_rvrSpiritTimer = 0;
         std::unordered_map<uint32, time_t> m_rvrHintTime;   // last "center is locked" hint per player
         uint32 m_rvrHoldTeam = 0;
+        // Plaguelands Front (tier 4)
+        bool m_t4Ready = false;
+        bool m_t4Tried = false;
+        uint32 m_t4Timer = 0, m_t4TickTimer = 0, m_t4BotTimer = 0, m_t4DirectTimer = 0;
+        uint32 m_t4HoldTeam = 0, m_t4HoldTime = 0, m_t4SiegeTeam = 0, m_t4LockTeam = 0, m_t4Holder = 0;
+        time_t m_t4LockUntil = 0, m_t4SiegeStart = 0;
+        uint32 m_t4LastOwner[4] = { 0, 0, 0, 0 };
+        ObjectGuid m_t4Lord;
+        float m_t4LordPos[3] = {};
+        std::unordered_set<uint32> m_t4Members, m_t4Roster, m_t4Directed;
+        std::unordered_map<uint32, uint8> m_t4Orders;
         // front life
         std::mutex m_frontMutex;                                       // guards the maps below (deaths come from map threads)
         std::unordered_map<uint32, FrontSession> m_frontSessions;      // real players on the front

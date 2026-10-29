@@ -1549,6 +1549,7 @@ namespace cmangos_module
             { "queue", std::bind(&RenownModule::HandleQueueCommand, this, std::placeholders::_1, std::placeholders::_2), SEC_PLAYER },
             { "rvr", std::bind(&RenownModule::HandleRvRCommand, this, std::placeholders::_1, std::placeholders::_2), SEC_PLAYER },
             { "mount", std::bind(&RenownModule::HandleMountCommand, this, std::placeholders::_1, std::placeholders::_2), SEC_PLAYER },
+            { "t4", std::bind(&RenownModule::HandleT4Command, this, std::placeholders::_1, std::placeholders::_2), SEC_PLAYER },
             { "warband", std::bind(&RenownModule::HandleWarbandCommand, this, std::placeholders::_1, std::placeholders::_2), SEC_PLAYER },
             { "session", std::bind(&RenownModule::HandleSessionCommand, this, std::placeholders::_1, std::placeholders::_2), SEC_PLAYER },
             { "reload", std::bind(&RenownModule::HandleReloadCommand, this, std::placeholders::_1, std::placeholders::_2), SEC_ADMINISTRATOR }

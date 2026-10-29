@@ -131,7 +131,7 @@ launcher:SetScript("OnLeave", function() GameTooltip:Hide() end)
 -- ---------------------------------------------------------------- panel
 local panel = CreateFrame("Frame", "RenownPvPPanel", UIParent)
 panel:SetWidth(300)
-panel:SetHeight(420)
+panel:SetHeight(474)
 panel:SetFrameStrata("MEDIUM")
 panel:EnableMouse(true)
 Backdrop(panel)
@@ -252,6 +252,18 @@ local mountButton = Button(panel, "RenownPvPMount", "Mount", 70, function() Reno
     "Summon or dismiss your field mount. You can also bind a key (Key Bindings > Renown) or type /fm.")
 mountButton:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -14, -368)
 
+-- Plaguelands Front (tier 4)
+local t4Header = Label(panel, "GameFontNormal", "Plaguelands Front")
+t4Header:SetPoint("TOPLEFT", mountText, "BOTTOMLEFT", 0, -14)
+local t4Sub = Label(panel, "GameFontDisableSmall", "tier 4 RvR, levels 55-60")
+t4Sub:SetPoint("LEFT", t4Header, "RIGHT", 8, 0)
+local t4Join = Button(panel, "RenownPvPT4Join", "Go to the Plaguelands", 150, function() Command(".renown t4 join") end,
+    "Travel to your keep in the Eastern Plaguelands: Darrowshire (Alliance) or Northdale (Horde). Hold three towers to besiege the enemy keep; the winners get Darkness Falls (Stratholme).")
+t4Join:SetPoint("TOPLEFT", t4Header, "BOTTOMLEFT", -4, -6)
+local t4Status = Button(panel, "RenownPvPT4Status", "Status", 64, function() Command(".renown t4 status") end,
+    "Towers, sieges and who holds Darkness Falls.")
+t4Status:SetPoint("LEFT", t4Join, "RIGHT", 6, 0)
+
 local function RefreshRenown()
     local s = RenownBar_State
     if not s then return end
@@ -346,6 +358,7 @@ local function RefreshFront()
     local level = UnitLevel("player") or 1
     if level > 19 then frontJoin:Disable() else frontJoin:Enable() end
     if front.inLake and level <= 19 then frontWarband:Enable() else frontWarband:Disable() end
+    if level >= 55 then t4Join:Enable(); frontWarband:Enable() else t4Join:Disable() end
 end
 
 local function RefreshMount()
@@ -661,4 +674,11 @@ SLASH_RENOWNWARBAND1 = "/warband"
 SlashCmdList["RENOWNWARBAND"] = function(msg)
     msg = string.lower(msg or "")
     Command(".renown warband " .. msg)
+end
+
+SLASH_RENOWNT4_1 = "/t4"
+SlashCmdList["RENOWNT4_"] = function(msg)
+    msg = string.lower(msg or "")
+    if msg == "" then msg = "join" end
+    Command(".renown t4 " .. msg)
 end

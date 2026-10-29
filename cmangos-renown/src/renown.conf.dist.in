@@ -105,6 +105,11 @@
 #        Real players only, so the bots' level sync is not disturbed.
 #        Default: 12
 #
+#    Renown.T4.*  Plaguelands Front (tier 4 RvR on the Eastern Plaguelands towers)
+#        Enabled (1)  MinLevel (55: 55-59 are bolstered to 60)  BotsActive (30) / BotsIdle (8) bots per side
+#        SiegeHold (120 s holding 3 towers opens the siege on the enemy keep)  LockMinutes (60)
+#        TickPoints (15 Renown per tower held per minute)  CapturePoints (60 Renown for a tower capture nearby)
+#
 #    Renown.Points.*
 #        Renown awarded per event
 #
@@ -170,6 +175,15 @@ Renown.RvR.BotsPerWave = 15
 Renown.RvR.BotsPerSide = 0
 Renown.RvR.FrontBotsActive = 30
 Renown.RvR.FrontBotsIdle = 8
+
+Renown.T4.Enabled = 1
+Renown.T4.MinLevel = 55
+Renown.T4.BotsActive = 30
+Renown.T4.BotsIdle = 8
+Renown.T4.SiegeHold = 120
+Renown.T4.LockMinutes = 60
+Renown.T4.TickPoints = 15
+Renown.T4.CapturePoints = 60
 
 Renown.FieldMount.Enable = 1
 Renown.FieldMount.Bots = 1
