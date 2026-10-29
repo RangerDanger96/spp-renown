@@ -262,25 +262,13 @@ namespace RenownLauncher
                 return;
             }
 
-            // On the host's own PC the public address usually can't be reached from inside (no NAT loopback),
-            // so when the server runs here, talk to it locally instead.
-            bool up = await Task.Run(() => CanConnect(ServerAddress(), config.port, 2500));
+            bool up = await Task.Run(() => CanConnect(config.address, config.port, 2500));
             serverUp = up;
             serverLight.BackColor = up ? Good : Bad;
             serverText.Text = up
-                ? (IsHost() ? "Server: online (running on this PC)" : "Server: online (" + config.address + ")")
+                ? "Server: online (" + config.address + ")"
                 : "Server: can't reach " + config.address + " - the host's PC may be off, or your connection isn't set up yet";
             UpdateZeroTier();
-        }
-
-        private static bool IsHost()
-        {
-            try { return Process.GetProcessesByName("realmd").Length > 0; } catch { return false; }
-        }
-
-        private string ServerAddress()
-        {
-            return IsHost() ? "127.0.0.1" : config.address;
         }
 
         private static bool CanConnect(string host, int port, int timeoutMs)
@@ -485,7 +473,7 @@ namespace RenownLauncher
                 await UpdateClientFiles(wow);
 
                 SetStatus("Setting the realmlist...");
-                WriteRealmlist(wow, ServerAddress());
+                WriteRealmlist(wow, config.address);
                 ClearCacheIfNeeded(wow);
 
                 if (!serverUp)
