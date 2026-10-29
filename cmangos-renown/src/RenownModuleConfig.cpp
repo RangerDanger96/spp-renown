@@ -83,6 +83,8 @@ namespace cmangos_module
     , questDailyBagChance(15)
     , pvpXPPercent(12)
     , rvrSpiritWave(30)
+    , rvrFrontBotsActive(30)
+    , rvrFrontBotsIdle(8)
     , pointsHonorableKill(10)
     , pointsKillingBlow(5)
     , pointsWorldKill(10)
@@ -161,6 +163,8 @@ namespace cmangos_module
         questDailyBagChance = config.GetIntDefault("Renown.Quests.DailyBagChance", 15);
         pvpXPPercent = config.GetIntDefault("Renown.PvPXP.Percent", 12);
         rvrSpiritWave = config.GetIntDefault("Renown.RvR.SpiritWave", 30);
+        rvrFrontBotsActive = config.GetIntDefault("Renown.RvR.FrontBotsActive", 30);
+        rvrFrontBotsIdle = config.GetIntDefault("Renown.RvR.FrontBotsIdle", 8);
 
         pointsHonorableKill = config.GetIntDefault("Renown.Points.HonorableKill", 10);
         pointsKillingBlow = config.GetIntDefault("Renown.Points.KillingBlow", 5);

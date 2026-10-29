@@ -196,6 +196,7 @@ namespace cmangos_module
         RvRStopSiege();
         m_rvrSiegeTeam = team;
         sGameEventMgr.StartEvent(team == HORDE ? RVR_EVENT_SIEGE_NORTHWATCH : RVR_EVENT_SIEGE_CROSSROADS, true);
+        m_rvrSiegeLog.push_back(time(nullptr));
 
         std::ostringstream text;
         text << "|cffffd100[Barrens Front]|r The " << TeamName(team) << " holds the whole front! "
@@ -498,47 +499,96 @@ namespace cmangos_module
     // ------------------------------------------------------------------ bots
     void RenownModule::RvRReinforce(const std::vector<Player*>& players)
     {
-        // A fixed share of each faction's level 1-19 bots (picked by guid, so always the same bots) fights on the
-        // front. Whenever one of them is idle somewhere else it is sent back, a wave at a time.
-        const uint32 share = std::min<uint32>(GetConfig()->rvrBotShare, 100);
-        if (!share || m_rvrLockTeam)
+        // The front keeps an enlisted roster of bots per side: about FrontBotsActive while real players are in the
+        // Barrens, FrontBotsIdle while nobody is watching. New bots arrive at their own base in small squads and
+        // ride out from there; when the front is over strength, spare bots are sent home.
+        const RenownModuleConfig* config = GetConfig();
+        const uint32 share = std::min<uint32>(config->rvrBotShare, 100);
+        if (!share)
         {
             return;
         }
 
-        const uint32 cap = GetConfig()->rvrBotsPerSide;     // 0 = no cap
-        const uint32 wave = std::max<uint32>(1, GetConfig()->rvrBotsPerWave);
-
-        // Bots of each side already on the front, so the sides can be kept roughly even
-        uint32 presentBySide[2] = { 0, 0 };
+        bool watched = false;
+        uint32 present[2] = { 0, 0 };
+        std::vector<Player*> enlisted[2];
         for (Player* player : players)
         {
-            if (!player->isRealPlayer() && player->GetLevel() <= GetConfig()->rvrMaxLevel && RvRIsMember(player->GetObjectGuid().GetCounter()))
+            if (player->isRealPlayer())
             {
-                ++presentBySide[player->GetTeam() == ALLIANCE ? 0 : 1];
+                if (player->GetMapId() == RVR_MAP && (player->GetZoneId() == 17 || RvRIsMember(player->GetObjectGuid().GetCounter())))
+                {
+                    watched = true;
+                }
+                continue;
+            }
+
+            if (m_rvrRoster.count(player->GetObjectGuid().GetCounter()))
+            {
+                const int side = player->GetTeam() == ALLIANCE ? 0 : 1;
+                ++present[side];
+                enlisted[side].push_back(player);
             }
         }
 
-        for (uint32 team : { (uint32)ALLIANCE, (uint32)HORDE })
+        uint32 target = watched ? config->rvrFrontBotsActive : config->rvrFrontBotsIdle;
+        if (config->rvrBotsPerSide)
         {
-            const uint32 present = presentBySide[team == ALLIANCE ? 0 : 1];
-            const uint32 otherPresent = presentBySide[team == ALLIANCE ? 1 : 0];
+            target = std::min(target, config->rvrBotsPerSide);
+        }
+
+        const uint32 wave = std::max<uint32>(1, config->rvrBotsPerWave);
+        for (int side = 0; side < 2; ++side)
+        {
+            const uint32 team = side == 0 ? ALLIANCE : HORDE;
+
+            // Over strength (players left, or the lake is locked): send a few spare bots home each time
+            uint32 limit = m_rvrLockTeam ? std::min<uint32>(target, config->rvrFrontBotsIdle) : target;
+            if (present[side] > limit + 4)
+            {
+                uint32 release = std::min<uint32>(present[side] - limit, wave);
+                for (Player* bot : enlisted[side])
+                {
+                    if (!release)
+                    {
+                        break;
+                    }
+
+                    if (bot->IsAlive() && !bot->IsInCombat() && !bot->IsTaxiFlying() && !bot->IsBeingTeleported())
+                    {
+                        const uint32 botId = bot->GetObjectGuid().GetCounter();
+                        m_rvrRoster.erase(botId);
+                        m_rvrBotOrders.erase(botId);
+                        if (m_rvrDirectedBots.erase(botId))
+                        {
+                            RvRBotFrontMode(bot, false);
+                        }
+                        bot->TeleportToHomebind();
+                        --release;
+                    }
+                }
+                continue;
+            }
+
+            if (m_rvrLockTeam || present[side] >= limit)
+            {
+                continue;
+            }
+
+            // Don't let one side snowball: stop sending once it is a full wave ahead of the other
+            if (present[side] >= present[1 - side] + wave)
+            {
+                continue;
+            }
+
             std::vector<Player*> candidates;
             for (Player* player : players)
             {
-                if (player->isRealPlayer() || player->GetTeam() != team || player->GetLevel() > GetConfig()->rvrMaxLevel)
+                const uint32 botId = player->GetObjectGuid().GetCounter();
+                if (player->isRealPlayer() || player->GetTeam() != team || player->GetLevel() > config->rvrMaxLevel ||
+                    botId % 100 >= share || m_rvrRoster.count(botId) || RvRIsMember(botId))
                 {
                     continue;
-                }
-
-                if (RvRIsMember(player->GetObjectGuid().GetCounter()))
-                {
-                    continue;
-                }
-
-                if (player->GetObjectGuid().GetCounter() % 100 >= share)
-                {
-                    continue;   // one of the bots that lives a normal life
                 }
 
                 if (!player->IsAlive() || player->IsInCombat() || player->InBattleGround() || player->InBattleGroundQueue() ||
@@ -551,27 +601,27 @@ namespace cmangos_module
                 candidates.push_back(player);
             }
 
-            uint32 need = wave;
-            if (cap)
+            // Arrive in squads of about four at the side's own base
+            uint32 need = std::min<uint32>(wave, limit - present[side]);
+            const Point& base = team == ALLIANCE ? RVR_ALLIANCE_ARRIVAL : RVR_HORDE_ARRIVAL;
+            float sx = base.x, sy = base.y;
+            for (uint32 n = 0; need > 0 && !candidates.empty(); ++n, --need)
             {
-                need = std::min<uint32>(need, present < cap ? cap - present : 0);
-            }
+                if (n % 4 == 0)
+                {
+                    const float a = frand(0.0f, 6.28f), d = frand(0.0f, 12.0f);
+                    sx = base.x + std::cos(a) * d;
+                    sy = base.y + std::sin(a) * d;
+                }
 
-            // Don't let one side snowball: stop sending once it is a full wave ahead of the other
-            if (present >= otherPresent + wave)
-            {
-                need = 0;
-            }
-
-            while (need-- > 0 && !candidates.empty())
-            {
                 const size_t pick = urand(0, uint32(candidates.size() - 1));
                 Player* bot = candidates[pick];
                 candidates.erase(candidates.begin() + pick);
 
-                float x, y, z;
-                RvRFrontPoint(team, x, y, z);
-                bot->TeleportTo(RVR_MAP, x, y, z, frand(0.0f, 6.28f));
+                m_rvrRoster.insert(bot->GetObjectGuid().GetCounter());
+                float x = sx + frand(-2.5f, 2.5f), y = sy + frand(-2.5f, 2.5f), z = base.z;
+                bot->UpdateAllowedPositionZ(x, y, z);
+                bot->TeleportTo(RVR_MAP, x, y, z + 0.5f, frand(0.0f, 6.28f));
             }
         }
     }
@@ -584,7 +634,6 @@ namespace cmangos_module
         // Orders: 0-2 = objective, 3 = own command post, 4 = enemy command post
         enum { ORDER_HOME = 3, ORDER_ENEMY_BASE = 4, ORDER_NONE = 255 };
         const RenownModuleConfig* config = GetConfig();
-        const uint32 share = std::min<uint32>(config->rvrBotShare, 100);
         if (m_rvrObjectives.size() != 3)
         {
             return;
@@ -647,6 +696,7 @@ namespace cmangos_module
         };
 
         const Plan plans[2] = { makePlan(ALLIANCE), makePlan(HORDE) };
+        std::unordered_set<uint32> seen;
 
         auto orderPoint = [&](uint32 team, uint8 order) -> Point
         {
@@ -667,11 +717,17 @@ namespace cmangos_module
             }
 
             const uint32 botId = bot->GetObjectGuid().GetCounter();
-            const bool frontBot = share && botId % 100 < share && bot->GetLevel() <= config->rvrMaxLevel &&
+            seen.insert(botId);
+            const bool frontBot = m_rvrRoster.count(botId) && bot->GetLevel() <= config->rvrMaxLevel &&
                                   !bot->InBattleGround() && bot->GetMapId() == RVR_MAP &&
-                                  (RvRIsMember(botId) || bot->GetZoneId() == 17);
+                                  (RvRIsMember(botId) || bot->GetZoneId() == 17 || bot->IsBeingTeleported());
             if (!frontBot)
             {
+                if (m_rvrRoster.count(botId) && !bot->IsBeingTeleported())
+                {
+                    m_rvrRoster.erase(botId);   // left the front (levelled out, battleground, wandered off...)
+                }
+
                 if (m_rvrDirectedBots.erase(botId))
                 {
                     m_rvrBotOrders.erase(botId);
@@ -729,6 +785,95 @@ namespace cmangos_module
             bot->UpdateAllowedPositionZ(x, y, z);
             bot->GetMotionMaster()->MovePoint(0, x, y, z, FORCED_MOVEMENT_RUN);
         }
+
+        // Bots that logged out leave the roster
+        for (auto it = m_rvrRoster.begin(); it != m_rvrRoster.end();)
+        {
+            if (!seen.count(*it))
+            {
+                m_rvrDirectedBots.erase(*it);
+                m_rvrBotOrders.erase(*it);
+                it = m_rvrRoster.erase(it);
+            }
+            else
+            {
+                ++it;
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ stats (GM): .renown rvr stats
+    void RenownModule::RvRStats(ChatHandler& handler)
+    {
+        const time_t now = time(nullptr);
+        for (std::vector<time_t>* log : { &m_rvrCaptureLog, &m_rvrSiegeLog })
+        {
+            log->erase(std::remove_if(log->begin(), log->end(), [now](time_t t) { return now - t > HOUR; }), log->end());
+        }
+
+        uint32 roster[2] = { 0, 0 }, inLake[2] = { 0, 0 }, dead[2] = { 0, 0 }, fighting[2] = { 0, 0 }, players[2] = { 0, 0 };
+        uint32 orders[2][5] = {};
+        bool watched = false;
+        {
+            HashMapHolder<Player>::ReadGuard guard(HashMapHolder<Player>::GetLock());
+            for (const auto& entry : sObjectAccessor.GetPlayers())
+            {
+                Player* p = entry.second;
+                if (!p || !p->IsInWorld())
+                {
+                    continue;
+                }
+
+                const int side = p->GetTeam() == ALLIANCE ? 0 : 1;
+                const uint32 id = p->GetObjectGuid().GetCounter();
+                if (p->isRealPlayer())
+                {
+                    if (p->GetMapId() == RVR_MAP && (p->GetZoneId() == 17 || RvRIsMember(id)))
+                    {
+                        watched = true;
+                        ++players[side];
+                    }
+                    continue;
+                }
+
+                if (!m_rvrRoster.count(id))
+                {
+                    continue;
+                }
+
+                ++roster[side];
+                if (RvRIsMember(id)) ++inLake[side];
+                if (!p->IsAlive()) ++dead[side];
+                if (p->IsInCombat()) ++fighting[side];
+                auto it = m_rvrBotOrders.find(id);
+                if (it != m_rvrBotOrders.end() && it->second < 5) ++orders[side][it->second];
+            }
+        }
+
+        const RenownModuleConfig* config = GetConfig();
+        handler.PSendSysMessage("|cffffd100[Barrens Front stats]|r %s - target %u bots per side",
+                                watched ? "players present" : "nobody watching",
+                                watched ? config->rvrFrontBotsActive : config->rvrFrontBotsIdle);
+        for (size_t i = 0; i < m_rvrObjectives.size(); ++i)
+        {
+            const RvRObjective& o = m_rvrObjectives[i];
+            const uint32 pct = std::min<uint32>(100, o.progress * 100 / std::max<uint32>(1, config->rvrCaptureTime * IN_MILLISECONDS));
+            handler.PSendSysMessage("  %s: %s%s", o.name, TeamName(o.owner),
+                                    o.capTeam && o.capTeam != o.owner ? (std::string(" (") + TeamName(o.capTeam) + " capturing " + std::to_string(pct) + "%)").c_str() : "");
+        }
+
+        const char* orderNames[5] = { "Kolkar", "Oasis", "Raptor", "home", "enemy base" };
+        for (int side = 0; side < 2; ++side)
+        {
+            handler.PSendSysMessage("  %s: %u players, %u bots (%u in lake, %u fighting, %u dead) - orders: %s %u, %s %u, %s %u, %s %u, %s %u",
+                                    TeamName(side == 0 ? ALLIANCE : HORDE), players[side], roster[side], inLake[side], fighting[side], dead[side],
+                                    orderNames[0], orders[side][0], orderNames[1], orders[side][1], orderNames[2], orders[side][2],
+                                    orderNames[3], orders[side][3], orderNames[4], orders[side][4]);
+        }
+
+        handler.PSendSysMessage("  Siege: %s  Lock: %s (%us)  Last hour: %u captures, %u sieges",
+                                TeamName(m_rvrSiegeTeam), TeamName(m_rvrLockTeam), m_rvrLockUntil > now ? uint32(m_rvrLockUntil - now) : 0,
+                                uint32(m_rvrCaptureLog.size()), uint32(m_rvrSiegeLog.size()));
     }
 
     // ------------------------------------------------------------------ spirit waves
@@ -1056,6 +1201,7 @@ namespace cmangos_module
                     {
                         const uint32 previous = o.owner;
                         RvRSetOwner(i, team);
+                        m_rvrCaptureLog.push_back(time(nullptr));
 
                         std::ostringstream text;
                         text << "|cffffd100[Barrens Front]|r The " << TeamName(team) << " has captured " << o.name
@@ -1250,6 +1396,17 @@ namespace cmangos_module
             player->TeleportTo(RVR_MAP, p.x, p.y, p.z, alliance ? RVR_ALLIANCE_ARRIVAL_O : RVR_HORDE_ARRIVAL_O);
             handler.PSendSysMessage("|cffffd100[Barrens Front]|r Off to %s. The front lies %s.", alliance ? "Northwatch Hold" : "the Crossroads",
                                     alliance ? "to the north, past the Raptor Grounds" : "to the southeast, past Kolkar Watch");
+            return true;
+        }
+
+        if (args == "stats")
+        {
+            if (session->GetSecurity() < SEC_GAMEMASTER)
+            {
+                return false;
+            }
+
+            RvRStats(handler);
             return true;
         }
 

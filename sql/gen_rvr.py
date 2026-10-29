@@ -249,6 +249,10 @@ S.append("-- ============================================================")
 S.append("DELETE FROM game_event_creature WHERE event=-1112;")
 S.append("DELETE FROM game_event WHERE entry=1112;")
 S.append("INSERT INTO game_event (entry,schedule_type,occurence,length,holiday,linkedTo,description) VALUES (1112,0,525600,1,0,0,'Barrens Front: lake wildlife cleared');")
+S.append("-- Kolkar patrols and the Brokespear rare in the lake are spawn groups: take them out of their groups first")
+S.append("DELETE s FROM spawn_group_spawn s JOIN spawn_group g ON g.Id=s.Id JOIN creature c ON c.guid=s.Guid "
+         "WHERE g.Name LIKE 'Barrens - %' AND c.map=1 AND c.position_x BETWEEN -2300 AND -300 AND c.position_y BETWEEN -3700 AND -2400 "
+         f"AND ({cond.replace('c.position','c.position')});")
 S.append("INSERT IGNORE INTO game_event_creature (guid,event) SELECT c.guid,-1112 FROM creature c JOIN creature_template t ON t.Entry=c.id "
          "WHERE c.map=1 AND c.position_x BETWEEN -2300 AND -300 AND c.position_y BETWEEN -3700 AND -2400 "
          "AND c.id < 190000 AND t.NpcFlags=0 AND t.CreatureType<>8 AND t.Faction NOT IN (85,1077,29,104,126) "

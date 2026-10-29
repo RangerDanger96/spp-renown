@@ -79,7 +79,9 @@
 #    Renown.RvR.BotShare        Percent of each faction's level 1-19 bots that fight on the front (default 80, 0 = off).
 #                               The same bots every time (picked by guid); idle ones are sent back in waves.
 #    Renown.RvR.BotsPerWave     Bots sent per faction every 30 seconds (default 15)
-#    Renown.RvR.BotsPerSide     Optional cap on front bots per faction (default 0 = no cap)
+#    Renown.RvR.FrontBotsActive Bots per faction on the front while real players are in the Barrens (default 30)
+#    Renown.RvR.FrontBotsIdle   Bots per faction on the front while no real player is there (default 8)
+#    Renown.RvR.BotsPerSide     Optional hard cap on front bots per faction on top of those (default 0 = none)
 #
 #    Renown.FieldMount.Enable   Levels 1-MaxLevel can summon their racial mount at Speed % (.renown mount, Mount button)
 #    Renown.FieldMount.Bots     Low-level bots traveling in the Barrens mount up automatically
@@ -163,6 +165,8 @@ Renown.RvR.SpiritWave = 30
 Renown.RvR.BotShare = 80
 Renown.RvR.BotsPerWave = 15
 Renown.RvR.BotsPerSide = 0
+Renown.RvR.FrontBotsActive = 30
+Renown.RvR.FrontBotsIdle = 8
 
 Renown.FieldMount.Enable = 1
 Renown.FieldMount.Bots = 1

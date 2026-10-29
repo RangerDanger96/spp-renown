@@ -11,6 +11,8 @@
 #include <vector>
 #include "Entities/Object.h"
 
+class ChatHandler;
+
 namespace cmangos_module
 {
     // Warhammer-style Renown: a PvP progression earned from kills, objectives and
@@ -112,6 +114,7 @@ namespace cmangos_module
         void UpdateBotMounts(const std::vector<Player*>& players);
         void RvRDirectBots(const std::vector<Player*>& players);
         void RvRSpiritWave(const std::vector<Player*>& players);
+        void RvRStats(ChatHandler& handler);
         bool HandleReloadCommand(WorldSession* session, const std::string& args);
 
         void LoadVendorCosts();
@@ -198,6 +201,8 @@ namespace cmangos_module
         uint32 m_rvrBotTimer = 0;
         uint32 m_rvrMountTimer = 0;
         std::unordered_set<uint32> m_rvrDirectedBots;
+        std::unordered_set<uint32> m_rvrRoster;              // bots enlisted for the front
+        std::vector<time_t> m_rvrCaptureLog, m_rvrSiegeLog;  // for .renown rvr stats
         std::unordered_map<uint32, uint8> m_rvrBotOrders;    // front bot -> current order
         uint32 m_rvrSpiritTimer = 0;
         std::unordered_map<uint32, time_t> m_rvrHintTime;   // last "center is locked" hint per player

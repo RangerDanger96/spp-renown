@@ -75,6 +75,8 @@ namespace cmangos_module
         uint32 questDailyBagChance;
         uint32 pvpXPPercent;
         uint32 rvrSpiritWave;
+        uint32 rvrFrontBotsActive;
+        uint32 rvrFrontBotsIdle;
 
         uint32 pointsHonorableKill;
         uint32 pointsKillingBlow;
