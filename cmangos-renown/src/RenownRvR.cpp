@@ -727,7 +727,7 @@ namespace cmangos_module
             const float angle = frand(0.0f, 6.28f), dist = frand(3.0f, 14.0f);
             float x = target.x + std::cos(angle) * dist, y = target.y + std::sin(angle) * dist, z = target.z;
             bot->UpdateAllowedPositionZ(x, y, z);
-            bot->GetMotionMaster()->MovePoint(0, x, y, z);
+            bot->GetMotionMaster()->MovePoint(0, x, y, z, FORCED_MOVEMENT_RUN);
         }
     }
 
