@@ -958,7 +958,7 @@ namespace cmangos_module
                 float x = base[0], y = base[1], z = base[2];
                 summoner->UpdateAllowedPositionZ(x, y, z);
                 Creature* kodo = summoner->SummonCreature(side == 0 ? NPC_SUPPLY_MULE_ALLIANCE : NPC_SUPPLY_KODO_HORDE, x, y, z, 0.0f,
-                                                          TEMPSPAWN_TIMED_OR_CORPSE_DESPAWN, uint32(CARAVAN_TIMEOUT + 60) * IN_MILLISECONDS, true);
+                                                          TEMPSPAWN_TIMED_OR_DEAD_DESPAWN, uint32(CARAVAN_TIMEOUT + 60) * IN_MILLISECONDS, true);
                 if (!kodo)
                 {
                     continue;
@@ -982,7 +982,7 @@ namespace cmangos_module
                 for (int e = 0; e < 2; ++e)
                 {
                     if (Creature* escort = summoner->SummonCreature(side == 0 ? NPC_ESCORT_ALLIANCE : NPC_ESCORT_HORDE, x + (e ? 3.0f : -3.0f), y, z, 0.0f,
-                                                                     TEMPSPAWN_TIMED_OR_CORPSE_DESPAWN, uint32(CARAVAN_TIMEOUT + 60) * IN_MILLISECONDS, true))
+                                                                     TEMPSPAWN_TIMED_OR_DEAD_DESPAWN, uint32(CARAVAN_TIMEOUT + 60) * IN_MILLISECONDS, true))
                     {
                         caravan.escorts[e] = escort->GetObjectGuid();
                         escort->GetMotionMaster()->MoveFollow(kodo, 3.0f, e ? 1.5707963f : -1.5707963f);
