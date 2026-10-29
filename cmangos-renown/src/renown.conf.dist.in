@@ -93,6 +93,12 @@
 #    Renown.Quests.PerDay (3)  ResetHour (6)  DailyRenown (150)  WeeklyRenown (500)
 #    Renown.Quests.DailyXPPercent (15)  WeeklyXPPercent (50)  DailyBagChance (15)
 #
+#    Renown.PvPXP.Percent
+#        Experience for PvP: every 100 Renown earned from kills, objectives and battleground results also gives
+#        this percent of the character's current level (one battleground is roughly 400 Renown). 0 = off.
+#        Real players only, so the bots' level sync is not disturbed.
+#        Default: 12
+#
 #    Renown.Points.*
 #        Renown awarded per event
 #
@@ -168,6 +174,8 @@ Renown.Quests.WeeklyRenown = 500
 Renown.Quests.DailyXPPercent = 15
 Renown.Quests.WeeklyXPPercent = 50
 Renown.Quests.DailyBagChance = 15
+
+Renown.PvPXP.Percent = 12
 
 Renown.Points.HonorableKill = 10
 Renown.Points.KillingBlow = 5

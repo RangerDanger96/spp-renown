@@ -1156,6 +1156,17 @@ namespace cmangos_module
             OnRankChanged(player, oldRank, newRank);
         }
 
+        // PvP experience: Renown from fighting (applyRate) also levels the character, so PvP alone is a way to level.
+        // Quests and loot bags pass applyRate = false and give their own rewards.
+        if (applyRate && player->isRealPlayer() && GetConfig()->pvpXPPercent)
+        {
+            const uint64 xp = (uint64)sObjectMgr.GetXPForLevel(player->GetLevel()) * gained * GetConfig()->pvpXPPercent / 10000;
+            if (xp)
+            {
+                player->GiveXP((uint32)std::min<uint64>(xp, 4000000000ULL), nullptr);
+            }
+        }
+
         SendAddonUpdate(player);
     }
 

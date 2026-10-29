@@ -73,6 +73,7 @@ namespace cmangos_module
         uint32 questDailyXPPercent;
         uint32 questWeeklyXPPercent;
         uint32 questDailyBagChance;
+        uint32 pvpXPPercent;
 
         uint32 pointsHonorableKill;
         uint32 pointsKillingBlow;

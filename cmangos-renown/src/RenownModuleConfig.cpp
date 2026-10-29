@@ -81,6 +81,7 @@ namespace cmangos_module
     , questDailyXPPercent(15)
     , questWeeklyXPPercent(50)
     , questDailyBagChance(15)
+    , pvpXPPercent(12)
     , pointsHonorableKill(10)
     , pointsKillingBlow(5)
     , pointsWorldKill(10)
@@ -157,6 +158,7 @@ namespace cmangos_module
         questDailyXPPercent = config.GetIntDefault("Renown.Quests.DailyXPPercent", 15);
         questWeeklyXPPercent = config.GetIntDefault("Renown.Quests.WeeklyXPPercent", 50);
         questDailyBagChance = config.GetIntDefault("Renown.Quests.DailyBagChance", 15);
+        pvpXPPercent = config.GetIntDefault("Renown.PvPXP.Percent", 12);
 
         pointsHonorableKill = config.GetIntDefault("Renown.Points.HonorableKill", 10);
         pointsKillingBlow = config.GetIntDefault("Renown.Points.KillingBlow", 5);
