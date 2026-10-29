@@ -47,3 +47,49 @@ index 35d511f2..f6dca7a3 100644
          return false;
  
  #ifdef MANGOSBOT_TWO
+diff --git a/playerbot/strategy/actions/BattleGroundTactics.cpp b/playerbot/strategy/actions/BattleGroundTactics.cpp
+index 09591d24..d7112799 100644
+--- a/playerbot/strategy/actions/BattleGroundTactics.cpp
++++ b/playerbot/strategy/actions/BattleGroundTactics.cpp
+@@ -2874,8 +2874,12 @@ bool BGTactics::Execute(Event& event)
+         if (useBuff())
+             return true;
+ 
++        // SPP Renown: "pushers" (bg role 6-9, about 40% of a team) keep heading for the objective while in combat
++        // in Warsong Gulch and Arathi Basin, as long as they are healthy, instead of brawling in midfield forever
++        uint32 pushRole = context->GetValue<uint32>("bg role")->Get();
++        bool pusher = pushRole >= 6 && (bgType == BATTLEGROUND_WS || bgType == BATTLEGROUND_AB) && bot->GetHealthPercent() > 40.0f;
+ #ifdef MANGOSBOT_ZERO
+-        if (sServerFacade.IsInCombat(bot) && !(bot->HasAura(BG_WS_SPELL_WARSONG_FLAG) || bot->HasAura(BG_WS_SPELL_SILVERWING_FLAG)))
++        if (sServerFacade.IsInCombat(bot) && !pusher && !(bot->HasAura(BG_WS_SPELL_WARSONG_FLAG) || bot->HasAura(BG_WS_SPELL_SILVERWING_FLAG)))
+ #else
+         if (sServerFacade.IsInCombat(bot) && !(bot->HasAura(BG_WS_SPELL_WARSONG_FLAG) || bot->HasAura(BG_WS_SPELL_SILVERWING_FLAG) || bot->HasAura(EY_SPELL_NETHERSTORM_FLAG)))
+ #endif
+diff --git a/playerbot/strategy/generic/BattlegroundStrategy.cpp b/playerbot/strategy/generic/BattlegroundStrategy.cpp
+index 8d693735..961da63c 100644
+--- a/playerbot/strategy/generic/BattlegroundStrategy.cpp
++++ b/playerbot/strategy/generic/BattlegroundStrategy.cpp
+@@ -95,6 +95,11 @@ void WarsongStrategy::InitNonCombatTriggers(std::list<TriggerNode*> &triggers)
+ void WarsongStrategy::InitCombatTriggers(std::list<TriggerNode*>& triggers)
+ {
+     InitNonCombatTriggers(triggers);
++
++    // SPP Renown: pushers keep moving to the objective in combat (the action itself skips everyone else)
++    triggers.push_back(new TriggerNode(
++        "bg active",
++        NextAction::array(0, new NextAction("bg move to objective", 35.0f), NULL)));
+ }
+ 
+ void AlteracStrategy::InitNonCombatTriggers(std::list<TriggerNode*> &triggers)
+@@ -134,6 +139,11 @@ void ArathiStrategy::InitNonCombatTriggers(std::list<TriggerNode*> &triggers)
+ void ArathiStrategy::InitCombatTriggers(std::list<TriggerNode*>& triggers)
+ {
+     InitNonCombatTriggers(triggers);
++
++    // SPP Renown: pushers keep moving to the objective in combat (the action itself skips everyone else)
++    triggers.push_back(new TriggerNode(
++        "bg active",
++        NextAction::array(0, new NextAction("bg move to objective", 35.0f), NULL)));
+ }
+ 
+ void EyeStrategy::InitNonCombatTriggers(std::list<TriggerNode*>& triggers)
