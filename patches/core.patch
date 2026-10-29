@@ -147,6 +147,20 @@ index 6e711ae..db7f79a 100644
  
  class BattleGroundWS : public BattleGround
  {
+diff --git a/src/game/Entities/Pet.cpp b/src/game/Entities/Pet.cpp
+index 3a3308b..45f68e3 100644
+--- a/src/game/Entities/Pet.cpp
++++ b/src/game/Entities/Pet.cpp
+@@ -2306,7 +2306,8 @@ void Pet::ForcedDespawn(uint32 timeMSToDespawn, bool onlyAlive)
+         return;
+     }
+ 
+-    if (IsDespawned())
++    // SPP Renown: a delayed despawn can fire after the pet was already unsummoned (crash: assert !m_removed)
++    if (IsDespawned() || m_removed)
+         return;
+ 
+     Unit* owner = GetOwner();
 diff --git a/src/game/Entities/Player.cpp b/src/game/Entities/Player.cpp
 index 223f2a9..a324902 100644
 --- a/src/game/Entities/Player.cpp
