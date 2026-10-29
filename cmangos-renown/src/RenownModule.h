@@ -111,6 +111,7 @@ namespace cmangos_module
         bool CastFieldMount(Player* player, bool instant);
         void UpdateBotMounts(const std::vector<Player*>& players);
         void RvRDirectBots(const std::vector<Player*>& players);
+        void RvRSpiritWave(const std::vector<Player*>& players);
         bool HandleReloadCommand(WorldSession* session, const std::string& args);
 
         void LoadVendorCosts();
@@ -197,6 +198,7 @@ namespace cmangos_module
         uint32 m_rvrBotTimer = 0;
         uint32 m_rvrMountTimer = 0;
         std::unordered_set<uint32> m_rvrDirectedBots;
+        uint32 m_rvrSpiritTimer = 0;
         std::unordered_map<uint32, time_t> m_rvrHintTime;   // last "center is locked" hint per player
         uint32 m_rvrHoldTeam = 0;
         uint32 m_rvrHoldTime = 0;

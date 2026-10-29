@@ -73,6 +73,8 @@
 #    Renown.RvR.TickPoints      Renown per owned objective every minute to each player of that side in the lake (default 5)
 #    Renown.RvR.DefendPoints    Extra Renown for killing an enemy near an objective your side holds (default 10)
 #    Renown.RvR.SiegeHold       Seconds a side must hold all objectives before the siege opens (default 120)
+#    Renown.RvR.SpiritWave      Seconds between battleground-style resurrection waves at the Barrens graveyards
+#                               (ghosts within 25 yards of a graveyard, no resurrection sickness; 0 = off, default 30)
 #    Renown.RvR.LockMinutes     How long the lake stays locked after a successful siege (default 20)
 #    Renown.RvR.BotShare        Percent of each faction's level 1-19 bots that fight on the front (default 80, 0 = off).
 #                               The same bots every time (picked by guid); idle ones are sent back in waves.
@@ -157,6 +159,7 @@ Renown.RvR.TickPoints = 5
 Renown.RvR.DefendPoints = 10
 Renown.RvR.SiegeHold = 120
 Renown.RvR.LockMinutes = 20
+Renown.RvR.SpiritWave = 30
 Renown.RvR.BotShare = 80
 Renown.RvR.BotsPerWave = 15
 Renown.RvR.BotsPerSide = 0

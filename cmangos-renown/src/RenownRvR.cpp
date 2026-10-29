@@ -623,6 +623,39 @@ namespace cmangos_module
         }
     }
 
+    // ------------------------------------------------------------------ spirit waves
+    void RenownModule::RvRSpiritWave(const std::vector<Player*>& players)
+    {
+        for (Player* player : players)
+        {
+            if (player->GetMapId() != RVR_MAP || player->GetZoneId() != 17 || player->IsAlive() ||
+                !player->HasFlag(PLAYER_FLAGS, PLAYER_FLAGS_GHOST) || !player->GetMap())
+            {
+                continue;
+            }
+
+            const WorldSafeLocsEntry* graveyard = player->GetMap()->GetGraveyardManager().GetClosestGraveYard(
+                player->GetPositionX(), player->GetPositionY(), player->GetPositionZ(), player->GetMapId(), player->GetTeam());
+            if (!graveyard)
+            {
+                continue;
+            }
+
+            const float dx = player->GetPositionX() - graveyard->x, dy = player->GetPositionY() - graveyard->y;
+            if (dx * dx + dy * dy > 25.0f * 25.0f)
+            {
+                continue;
+            }
+
+            player->ResurrectPlayer(1.0f, false);
+            player->SpawnCorpseBones();
+            if (player->isRealPlayer())
+            {
+                ChatHandler(player).PSendSysMessage("|cffffd100[Barrens Front]|r The spirit healer returns you to the fight.");
+            }
+        }
+    }
+
     // ------------------------------------------------------------------ field mounts
     uint32 RenownModule::FieldMountSpell(const Player* player)
     {
@@ -1009,6 +1042,17 @@ namespace cmangos_module
             {
                 m_rvrBotTimer = 0;
                 RvRReinforce(players);
+            }
+        }
+
+        // Battleground-style resurrection waves at the Barrens graveyards
+        if (config->rvrSpiritWave)
+        {
+            m_rvrSpiritTimer += diff;
+            if (m_rvrSpiritTimer >= config->rvrSpiritWave * IN_MILLISECONDS)
+            {
+                m_rvrSpiritTimer = 0;
+                RvRSpiritWave(players);
             }
         }
 
