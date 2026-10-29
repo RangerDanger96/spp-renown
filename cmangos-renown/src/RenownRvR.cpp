@@ -28,6 +28,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <ctime>
 #include <sstream>
 
 #ifdef ENABLE_PLAYERBOTS
@@ -872,6 +873,22 @@ namespace cmangos_module
 
                 // The center can only be taken by a side that holds both towers
                 const bool allowed = team && (o.tower || (m_rvrObjectives[0].owner == team && m_rvrObjectives[2].owner == team));
+                if (team && team != o.owner && !allowed)
+                {
+                    // Tell players why nothing happens (at most every 30 seconds each)
+                    const time_t now = time(nullptr);
+                    for (Player* player : nearby[team == ALLIANCE ? 0 : 1])
+                    {
+                        time_t& last = m_rvrHintTime[player->GetObjectGuid().GetCounter()];
+                        if (player->isRealPlayer() && now - last >= 30)
+                        {
+                            last = now;
+                            ChatHandler(player).PSendSysMessage("|cffffd100[Barrens Front]|r %s can only be captured once the %s holds both Kolkar Watch and the Raptor Grounds.",
+                                                                o.name.c_str(), TeamName(team));
+                        }
+                    }
+                }
+
                 if (team && team != o.owner && allowed)
                 {
                     if (o.capTeam != team)

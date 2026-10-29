@@ -197,6 +197,7 @@ namespace cmangos_module
         uint32 m_rvrBotTimer = 0;
         uint32 m_rvrMountTimer = 0;
         std::unordered_set<uint32> m_rvrDirectedBots;
+        std::unordered_map<uint32, time_t> m_rvrHintTime;   // last "center is locked" hint per player
         uint32 m_rvrHoldTeam = 0;
         uint32 m_rvrHoldTime = 0;
         uint32 m_rvrSiegeTeam = 0;                       // attacking team during a siege
