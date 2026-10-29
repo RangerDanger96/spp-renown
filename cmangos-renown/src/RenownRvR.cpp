@@ -884,7 +884,7 @@ namespace cmangos_module
                         {
                             last = now;
                             ChatHandler(player).PSendSysMessage("|cffffd100[Barrens Front]|r %s can only be captured once the %s holds both Kolkar Watch and the Raptor Grounds.",
-                                                                o.name.c_str(), TeamName(team));
+                                                                o.name, TeamName(team));
                         }
                     }
                 }
