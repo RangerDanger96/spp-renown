@@ -45,6 +45,8 @@
 #
 #    Renown.LootBags.GoldPoints / PurplePoints / BluePoints            Renown points in each bag
 #    Renown.LootBags.GoldItemChance / PurpleItemChance / BlueItemChance  Chance (%) the bag also holds gear
+#    Renown.LootBags.DungeonLoot   1 = the gear is a random drop from an on-level dungeon (Renown gear below level 13
+#                                  or when nothing fits), 0 = always Renown vendor gear. Default: 1
 #
 #    Renown.Streaks
 #        Kill streaks: from 3 kills without dying each kill gives BonusPerKill x streak extra Renown (max BonusMax).
@@ -143,6 +145,7 @@ Renown.LootBags.BluePoints = 30
 Renown.LootBags.GoldItemChance = 100
 Renown.LootBags.PurpleItemChance = 50
 Renown.LootBags.BlueItemChance = 25
+Renown.LootBags.DungeonLoot = 1
 
 Renown.Streaks = 1
 Renown.Streaks.BonusPerKill = 2
@@ -200,6 +203,6 @@ Renown.Points.Win = 100
 Renown.Points.Loss = 40
 Renown.Points.HealAssist = 5
 
-Renown.InsigniaRanks = 5,10,15,20,25,30
-Renown.InsigniaItems = 190520,190521,190522,190523,190524,190525
-Renown.Quartermasters = 190100,190101
+Renown.InsigniaRanks = 5,10,15,20,25,30,33,36,40
+Renown.InsigniaItems = 190520,190521,190522,190523,190524,190525,190526,190527,190528
+Renown.Quartermasters = 190100,190101,190108,190109,190110,190111

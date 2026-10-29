@@ -59,6 +59,7 @@ namespace cmangos_module
         }
 
         LoadVendorCosts();
+        LoadDungeonLoot();
         RvRInit();
         QuestsInit();
 
@@ -571,6 +572,7 @@ namespace cmangos_module
     bool RenownModule::HandleReloadCommand(WorldSession* session, const std::string& args)
     {
         LoadVendorCosts();
+        LoadDungeonLoot();
         if (Player* self = session ? session->GetPlayer() : nullptr)
         {
             ChatHandler(self).PSendSysMessage("Renown vendor prices reloaded (%u items).", (uint32)m_vendorCosts.size());
@@ -605,6 +607,157 @@ namespace cmangos_module
         }
 
         return std::min<uint32>(level / 10, 6);
+    }
+
+    static const char* DungeonName(uint32 map)
+    {
+        switch (map)
+        {
+            case 389: return "Ragefire Chasm";
+            case 36:  return "the Deadmines";
+            case 43:  return "the Wailing Caverns";
+            case 33:  return "Shadowfang Keep";
+            case 48:  return "Blackfathom Deeps";
+            case 34:  return "the Stockade";
+            case 90:  return "Gnomeregan";
+            case 47:  return "Razorfen Kraul";
+            case 189: return "the Scarlet Monastery";
+            case 129: return "Razorfen Downs";
+            case 70:  return "Uldaman";
+            case 209: return "Zul'Farrak";
+            case 349: return "Maraudon";
+            case 109: return "the Sunken Temple";
+            case 230: return "Blackrock Depths";
+            case 229: return "Blackrock Spire";
+            case 429: return "Dire Maul";
+            case 289: return "Scholomance";
+            case 329: return "Stratholme";
+            default:  return "a dungeon";
+        }
+    }
+
+    void RenownModule::LoadDungeonLoot()
+    {
+        std::vector<DungeonLoot> loot;
+        if (auto result = WorldDatabase.Query("SELECT `item`, `map`, `reqlevel`, `quality` FROM `custom_renown_dungeon_loot`"))
+        {
+            do
+            {
+                Field* fields = result->Fetch();
+                DungeonLoot entry;
+                entry.item = fields[0].GetUInt32();
+                entry.map = fields[1].GetUInt32();
+                entry.reqLevel = fields[2].GetUInt32();
+                entry.quality = fields[3].GetUInt32();
+                if (ObjectMgr::GetItemPrototype(entry.item))
+                {
+                    loot.push_back(entry);
+                }
+            }
+            while (result->NextRow());
+        }
+
+        std::lock_guard<std::mutex> lock(m_vendorMutex);
+        m_dungeonLoot.swap(loot);
+        sLog.outString("Renown: %u dungeon items for loot bags", uint32(m_dungeonLoot.size()));
+    }
+
+    uint32 RenownModule::PickDungeonItem(Player* player, BagType bag, uint32& map) const
+    {
+        // Quality by bag: gold = blue with a good chance at epic, purple = blue, blue = mostly green
+        uint32 wanted = ITEM_QUALITY_RARE;
+        if (bag == BAG_GOLD && urand(1, 100) <= 35)
+        {
+            wanted = ITEM_QUALITY_EPIC;
+        }
+        else if (bag == BAG_BLUE && urand(1, 100) <= 70)
+        {
+            wanted = ITEM_QUALITY_UNCOMMON;
+        }
+
+        uint32 armorType = ITEM_SUBCLASS_ARMOR_CLOTH;
+        if (player->HasSkill(SKILL_PLATE_MAIL))
+        {
+            armorType = ITEM_SUBCLASS_ARMOR_PLATE;
+        }
+        else if (player->HasSkill(SKILL_MAIL))
+        {
+            armorType = ITEM_SUBCLASS_ARMOR_MAIL;
+        }
+        else if (player->HasSkill(SKILL_LEATHER))
+        {
+            armorType = ITEM_SUBCLASS_ARMOR_LEATHER;
+        }
+
+        const uint32 playerClass = player->getClass();
+        const bool physical = playerClass == CLASS_WARRIOR || playerClass == CLASS_ROGUE || playerClass == CLASS_HUNTER;
+        const bool caster = playerClass == CLASS_MAGE || playerClass == CLASS_PRIEST || playerClass == CLASS_WARLOCK;
+        const uint32 level = player->GetLevel();
+
+        std::vector<DungeonLoot> pool;
+        {
+            std::lock_guard<std::mutex> lock(m_vendorMutex);
+            pool = m_dungeonLoot;
+        }
+
+        // Try the wanted quality first, then step down one quality at a time
+        for (uint32 quality = wanted; quality >= ITEM_QUALITY_UNCOMMON; --quality)
+        {
+            std::vector<const DungeonLoot*> candidates;
+            for (const DungeonLoot& entry : pool)
+            {
+                if (entry.quality != quality || entry.reqLevel > level || entry.reqLevel + 6 < level)
+                {
+                    continue;
+                }
+
+                ItemPrototype const* proto = ObjectMgr::GetItemPrototype(entry.item);
+                if (!proto || player->CanUseItem(proto, false) != EQUIP_ERR_OK || player->HasItemCount(entry.item, 1, true))
+                {
+                    continue;
+                }
+
+                // Armor: only the best type the player wears (cloaks, rings, necks, trinkets and shields are fine)
+                if (proto->Class == ITEM_CLASS_ARMOR && proto->SubClass >= ITEM_SUBCLASS_ARMOR_CLOTH && proto->SubClass <= ITEM_SUBCLASS_ARMOR_PLATE &&
+                    proto->InventoryType != INVTYPE_CLOAK && proto->SubClass != armorType)
+                {
+                    continue;
+                }
+
+                // Stats that suit the class
+                int physicalStats = 0, casterStats = 0;
+                for (uint32 s = 0; s < MAX_ITEM_PROTO_STATS; ++s)
+                {
+                    switch (proto->ItemStat[s].ItemStatType)
+                    {
+                        case ITEM_MOD_STRENGTH: case ITEM_MOD_AGILITY: physicalStats += proto->ItemStat[s].ItemStatValue; break;
+                        case ITEM_MOD_INTELLECT: case ITEM_MOD_SPIRIT: casterStats += proto->ItemStat[s].ItemStatValue; break;
+                        default: break;
+                    }
+                }
+
+                if ((physical && casterStats > physicalStats) || (caster && physicalStats > casterStats))
+                {
+                    continue;
+                }
+
+                candidates.push_back(&entry);
+            }
+
+            if (!candidates.empty())
+            {
+                const DungeonLoot* pick = candidates[urand(0, uint32(candidates.size() - 1))];
+                map = pick->map;
+                return pick->item;
+            }
+
+            if (quality == ITEM_QUALITY_UNCOMMON)
+            {
+                break;
+            }
+        }
+
+        return 0;
     }
 
     uint32 RenownModule::PickRewardItem(Player* player) const
@@ -720,6 +873,11 @@ namespace cmangos_module
         // Bags full: send it by mail
         if (Item* item = Item::CreateItem(itemId, 1, player))
         {
+            if (const int32 randomProperty = Item::GenerateItemRandomPropertyId(itemId))
+            {
+                item->SetItemRandomProperties(randomProperty);
+            }
+
             CharacterDatabase.BeginTransaction();
             item->SaveToDB();
             CharacterDatabase.CommitTransaction();
@@ -738,17 +896,31 @@ namespace cmangos_module
         std::ostringstream message;
         message << "|cffffd100[Renown]|r You won a " << names[bag] << "!";
 
-        uint32 itemId = 0;
+        uint32 itemId = 0, dungeon = 0;
         if (urand(1, 100) <= chances[bag])
         {
-            itemId = PickRewardItem(player);
+            if (config->lootBagDungeonLoot)
+            {
+                itemId = PickDungeonItem(player, bag, dungeon);
+            }
+
+            if (!itemId)
+            {
+                itemId = PickRewardItem(player);
+            }
         }
 
         uint32 renown = points[bag];
         if (itemId)
         {
             ItemPrototype const* proto = ObjectMgr::GetItemPrototype(itemId);
-            message << " It holds |cffffffff[" << (proto ? proto->Name1 : "item") << "]|r";
+            static const char* qualityColor[] = { "ff9d9d9d", "ffffffff", "ff1eff00", "ff0070dd", "ffa335ee", "ffff8000" };
+            const uint32 quality = proto ? std::min<uint32>(proto->Quality, 5) : 1;
+            message << " It holds |c" << qualityColor[quality] << "|Hitem:" << itemId << ":0:0:0|h[" << (proto ? proto->Name1 : "item") << "]|h|r";
+            if (dungeon)
+            {
+                message << " from " << DungeonName(dungeon);
+            }
             GiveItem(player, itemId, "Loot bag reward");
             message << " and " << renown << " Renown.";
         }

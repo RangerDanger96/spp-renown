@@ -49,6 +49,7 @@ namespace cmangos_module
     , lootBagItemChanceGold(100)
     , lootBagItemChancePurple(50)
     , lootBagItemChanceBlue(25)
+    , lootBagDungeonLoot(true)
     , streaks(true)
     , streakBonusPerKill(2)
     , streakBonusMax(30)
@@ -99,9 +100,9 @@ namespace cmangos_module
     , pointsSecondaryObjective(20)
     , pointsWin(100)
     , pointsLoss(40)
-    , insigniaRanks({ 5, 10, 15, 20, 25, 30 })
-    , insigniaItems({ 190520, 190521, 190522, 190523, 190524, 190525 })
-    , quartermasters({ 190100, 190101 })
+    , insigniaRanks({ 5, 10, 15, 20, 25, 30, 33, 36, 40 })
+    , insigniaItems({ 190520, 190521, 190522, 190523, 190524, 190525, 190526, 190527, 190528 })
+    , quartermasters({ 190100, 190101, 190108, 190109, 190110, 190111 })
     {
 
     }
@@ -124,6 +125,7 @@ namespace cmangos_module
         lootBagItemChanceGold = config.GetIntDefault("Renown.LootBags.GoldItemChance", 100);
         lootBagItemChancePurple = config.GetIntDefault("Renown.LootBags.PurpleItemChance", 50);
         lootBagItemChanceBlue = config.GetIntDefault("Renown.LootBags.BlueItemChance", 25);
+        lootBagDungeonLoot = config.GetBoolDefault("Renown.LootBags.DungeonLoot", true);
 
         streaks = config.GetBoolDefault("Renown.Streaks", true);
         streakBonusPerKill = config.GetIntDefault("Renown.Streaks.BonusPerKill", 2);
@@ -181,15 +183,15 @@ namespace cmangos_module
         pointsWin = config.GetIntDefault("Renown.Points.Win", 100);
         pointsLoss = config.GetIntDefault("Renown.Points.Loss", 40);
 
-        const std::vector<uint32> ranks = ParseList(config.GetStringDefault("Renown.InsigniaRanks", "5,10,15,20,25,30"));
-        const std::vector<uint32> items = ParseList(config.GetStringDefault("Renown.InsigniaItems", "190520,190521,190522,190523,190524,190525"));
+        const std::vector<uint32> ranks = ParseList(config.GetStringDefault("Renown.InsigniaRanks", "5,10,15,20,25,30,33,36,40"));
+        const std::vector<uint32> items = ParseList(config.GetStringDefault("Renown.InsigniaItems", "190520,190521,190522,190523,190524,190525,190526,190527,190528"));
         if (!ranks.empty() && ranks.size() == items.size())
         {
             insigniaRanks = ranks;
             insigniaItems = items;
         }
 
-        const std::vector<uint32> npcs = ParseList(config.GetStringDefault("Renown.Quartermasters", "190100,190101"));
+        const std::vector<uint32> npcs = ParseList(config.GetStringDefault("Renown.Quartermasters", "190100,190101,190108,190109,190110,190111"));
         if (!npcs.empty())
         {
             quartermasters = npcs;

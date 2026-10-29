@@ -159,6 +159,9 @@ namespace cmangos_module
         void AwardLootBags(BattleGround* battleground, uint32 winnerTeam);
         void GiveLootBag(Player* player, BagType bag);
         uint32 PickRewardItem(Player* player) const;
+        struct DungeonLoot { uint32 item; uint32 map; uint32 reqLevel; uint32 quality; };
+        void LoadDungeonLoot();
+        uint32 PickDungeonItem(Player* player, BagType bag, uint32& map) const;
         void GiveItem(Player* player, uint32 itemId, const std::string& subject);
         uint32 GetRenownTier(Player* player) const;   // highest unlocked reward tier (0 = none)
 
@@ -218,6 +221,7 @@ namespace cmangos_module
 
         std::unordered_map<uint32, uint32> m_vendorCosts; // item entry -> renown cost
         std::unordered_map<uint32, uint32> m_vendorTiers; // item entry -> reward tier (0 = open)
+        std::vector<DungeonLoot> m_dungeonLoot;          // loot bag gear from 5-player dungeons
 
         // victim guid -> recent attackers, player guid -> recent healers (guid, time)
         std::unordered_map<uint32, std::vector<std::pair<uint32, time_t>>> m_attackers;

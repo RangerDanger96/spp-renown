@@ -12,10 +12,21 @@ VARIANTS=[
  ("mail",   3, {STR:0.55,STA:0.45},          "Chain"),      # warrior, paladin
 ]
 ARMOR_SLOTS=[(5,"Tunic",1.0,[5,20]),(7,"Leggings",1.0,[7]),(1,"Helm",0.9,[1]),(3,"Shoulders",0.75,[3]),(10,"Gloves",0.75,[10]),(8,"Boots",0.75,[8]),(6,"Belt",0.75,[6]),(9,"Bracers",0.5,[9])]
+# From level 40 on warriors/paladins wear plate and hunters/shamans mail
+VARIANTS_40=[
+ ("cloth",    1, {INT:0.45,STA:0.35,SPI:0.20}, "Silk"),
+ ("lagi",     2, {AGI:0.55,STA:0.45},          "Leather"),
+ ("lcast",    2, {INT:0.45,STA:0.30,SPI:0.25}, "Hide"),
+ ("mail",     3, {AGI:0.50,STA:0.35,INT:0.15}, "Chain"),       # hunter, enhancement shaman
+ ("mailcast", 3, {INT:0.45,STA:0.30,SPI:0.25}, "Mail"),        # shaman healer
+ ("plate",    4, {STR:0.55,STA:0.45},          "Plate"),       # warrior, paladin
+]
 VARIANT_SLOTNAME={"cloth":{5:"Robe",7:"Pants",1:"Cowl",3:"Mantle",10:"Gloves",8:"Slippers",6:"Sash",9:"Cuffs"},
                   "lagi":{5:"Jerkin",7:"Pants",1:"Cap",3:"Shoulderpads",10:"Gloves",8:"Boots",6:"Belt",9:"Bracers"},
                   "lcast":{5:"Vest",7:"Leggings",1:"Headband",3:"Spaulders",10:"Handwraps",8:"Boots",6:"Cord",9:"Wristwraps"},
-                  "mail":{5:"Hauberk",7:"Legguards",1:"Helm",3:"Pauldrons",10:"Gauntlets",8:"Sabatons",6:"Girdle",9:"Bracers"}}
+                  "mail":{5:"Hauberk",7:"Legguards",1:"Helm",3:"Pauldrons",10:"Gauntlets",8:"Sabatons",6:"Girdle",9:"Bracers"},
+                  "mailcast":{5:"Vestment",7:"Kilt",1:"Coif",3:"Epaulets",10:"Grips",8:"Greaves",6:"Waistband",9:"Bindings"},
+                  "plate":{5:"Breastplate",7:"Legplates",1:"Greathelm",3:"Spaulders",10:"Handguards",8:"Warboots",6:"Waistguard",9:"Vambraces"}}
 ACCESSORIES=[ # (class,subclass,invtypes,name,weight,stats)
  (4,1,[16],"Cloak of Fury",0.55,{STR:0.5,STA:0.5}),
  (4,1,[16],"Cloak of Swiftness",0.55,{AGI:0.5,STA:0.5}),
@@ -40,7 +51,12 @@ WEAPONS=[ # (class,subclass,invtypes,name,weight,stats)
 BRACKETS=[ # (key, title prefix, required level, base target level, stat budget at weight 1.0)
  ("t0","Recruit's",1,9,8),
  ("t1","Skirmisher's",10,19,14),
+ ("t2","Footman's",20,29,20),
+ ("t3","Lancer's",30,39,27),
+ ("t4","Veteran's",40,49,34),
+ ("t5","Vanguard's",50,59,42),
 ]
+NEW_BRACKET_BASE={"t2":191000,"t3":191100,"t4":191200,"t5":191300}   # later brackets: fixed ID blocks
 def base(cls,sub,invs,target,span=3):
     inv=",".join(map(str,invs))
     r=q(f"""SELECT entry FROM item_template WHERE class={cls} AND subclass={sub} AND InventoryType IN ({inv})
@@ -63,7 +79,7 @@ def build():
     items=[] # dict entries
     eid=190600
     for bkey,prefix,req,target,budget in BRACKETS:
-        for vkey,sub,wts,stem in VARIANTS:
+        for vkey,sub,wts,stem in (VARIANTS_40 if req>=40 else VARIANTS):
             for inv,_,wt,invs in ARMOR_SLOTS:
                 b=base(4,sub,invs,target)
                 items.append(dict(entry=eid,bracket=bkey,base=b,name=f"{prefix} {stem} {VARIANT_SLOTNAME[vkey][inv]}",
@@ -75,14 +91,17 @@ def build():
     # Keep the item IDs of the first release (190600-190667) stable; slots added later get 190700+
     OLD_SLOTS=[5,7,10,8,6]; OLD_ACC=6
     old=[]
-    for bkey,prefix,req,target,budget in BRACKETS:
+    for bkey,prefix,req,target,budget in BRACKETS[:2]:
         for vkey,sub,wts,stem in VARIANTS:
             for inv in OLD_SLOTS: old.append(f"{prefix} {stem} {VARIANT_SLOTNAME[vkey][inv]}")
         for cls,sub,invs,nm,wt,wts in ACCESSORIES[:OLD_ACC]+WEAPONS: old.append(f"{prefix} {nm}")
     oldid={n:190600+i for i,n in enumerate(old)}
     nxt=190700
+    counters=dict(NEW_BRACKET_BASE)
     for it in items:
-        if it["name"] in oldid: it["entry"]=oldid[it["name"]]
+        if it["bracket"] in counters:
+            it["entry"]=counters[it["bracket"]]; counters[it["bracket"]]+=1
+        elif it["name"] in oldid: it["entry"]=oldid[it["name"]]
         else: it["entry"]=nxt; nxt+=1
     return items
 if __name__=="__main__":
