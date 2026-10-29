@@ -221,3 +221,13 @@ DELETE FROM game_event WHERE entry=1112;
 INSERT INTO game_event (entry,schedule_type,occurence,length,holiday,linkedTo,description) VALUES (1112,0,525600,1,0,0,'Barrens Front: lake wildlife cleared');
 INSERT IGNORE INTO game_event_creature (guid,event) SELECT c.guid,-1112 FROM creature c JOIN creature_template t ON t.Entry=c.id WHERE c.map=1 AND c.position_x BETWEEN -2300 AND -300 AND c.position_y BETWEEN -3700 AND -2400 AND c.id < 190000 AND t.NpcFlags=0 AND t.CreatureType<>8 AND t.Faction NOT IN (85,1077,29,104,126) AND c.guid NOT IN (SELECT guid FROM (SELECT guid FROM game_event_creature) e) AND c.guid NOT IN (SELECT Guid FROM spawn_group_spawn) AND ((POW(c.position_x-(-680)-GREATEST(0,LEAST(1,((c.position_x-(-680))*(-169)+(c.position_y-(-2740))*(-118))/42485))*(-169),2)+POW(c.position_y-(-2740)-GREATEST(0,LEAST(1,((c.position_x-(-680))*(-169)+(c.position_y-(-2740))*(-118))/42485))*(-118),2) <= 40000) OR (POW(c.position_x-(-849)-GREATEST(0,LEAST(1,((c.position_x-(-849))*(-406)+(c.position_y-(-2858))*(-292))/250100))*(-406),2)+POW(c.position_y-(-2858)-GREATEST(0,LEAST(1,((c.position_x-(-849))*(-406)+(c.position_y-(-2858))*(-292))/250100))*(-292),2) <= 40000) OR (POW(c.position_x-(-1255)-GREATEST(0,LEAST(1,((c.position_x-(-1255))*(-535)+(c.position_y-(-3150))*(-130))/303125))*(-535),2)+POW(c.position_y-(-3150)-GREATEST(0,LEAST(1,((c.position_x-(-1255))*(-535)+(c.position_y-(-3150))*(-130))/303125))*(-130),2) <= 40000) OR (POW(c.position_x-(-1790)-GREATEST(0,LEAST(1,((c.position_x-(-1790))*(-175)+(c.position_y-(-3280))*(-115))/43850))*(-175),2)+POW(c.position_y-(-3280)-GREATEST(0,LEAST(1,((c.position_x-(-1790))*(-175)+(c.position_y-(-3280))*(-115))/43850))*(-115),2) <= 40000));
 SELECT 'lake_wildlife_removed', COUNT(*) FROM game_event_creature WHERE event=-1112;
+
+-- ============================================================
+-- Barrens Front: separate graveyards (Horde: the Crossroads, Alliance: Northwatch Hold)
+-- ============================================================
+DELETE FROM world_safe_locs WHERE id=1900;
+INSERT INTO world_safe_locs (id,map,x,y,z,o,name) VALUES (1900,1,-2093.0,-3639.0,62.0,1.0,'The Barrens, Northwatch Hold');
+DELETE FROM game_graveyard_zone WHERE id=1900 OR (id=249 AND ghost_loc IN (17,392));
+INSERT INTO game_graveyard_zone (id,ghost_loc,link_kind,faction) VALUES (1900,17,0,469),(249,392,0,0);
+DELETE FROM creature WHERE guid=9100340;
+INSERT INTO creature (guid,id,map,spawnMask,position_x,position_y,position_z,orientation,spawntimesecsmin,spawntimesecsmax,spawndist,MovementType) VALUES (9100340,6491,1,1,-2093.0,-3639.0,62.0,1.0,60,60,0,0);

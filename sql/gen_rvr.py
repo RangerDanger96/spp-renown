@@ -257,3 +257,20 @@ S.append("INSERT IGNORE INTO game_event_creature (guid,event) SELECT c.guid,-111
          f"AND ({cond});")
 S.append("SELECT 'lake_wildlife_removed', COUNT(*) FROM game_event_creature WHERE event=-1112;")
 with open('/root/rvr/zz_rvr.sql','a',newline='\r\n') as f: f.write("\n".join(S)+"\n")
+
+# ------------------------------------------------------------------ separate front graveyards
+# Ratchet's graveyard served the whole Barrens for both sides and sits right next to the lake, so everyone came
+# back at the same spirit healer. On the front: Horde -> the Crossroads (already Horde only), Alliance -> a new
+# graveyard inside Northwatch Hold. Ratchet keeps serving the town of Ratchet itself (area 392).
+G=[]
+G.append("")
+G.append("-- ============================================================")
+G.append("-- Barrens Front: separate graveyards (Horde: the Crossroads, Alliance: Northwatch Hold)")
+G.append("-- ============================================================")
+G.append("DELETE FROM world_safe_locs WHERE id=1900;")
+G.append("INSERT INTO world_safe_locs (id,map,x,y,z,o,name) VALUES (1900,1,-2093.0,-3639.0,62.0,1.0,'The Barrens, Northwatch Hold');")
+G.append("DELETE FROM game_graveyard_zone WHERE id=1900 OR (id=249 AND ghost_loc IN (17,392));")
+G.append("INSERT INTO game_graveyard_zone (id,ghost_loc,link_kind,faction) VALUES (1900,17,0,469),(249,392,0,0);")
+G.append("DELETE FROM creature WHERE guid=9100340;")
+G.append("INSERT INTO creature (guid,id,map,spawnMask,position_x,position_y,position_z,orientation,spawntimesecsmin,spawntimesecsmax,spawndist,MovementType) VALUES (9100340,6491,1,1,-2093.0,-3639.0,62.0,1.0,60,60,0,0);")
+with open('/root/rvr/zz_rvr.sql','a',newline='\r\n') as f: f.write("\n".join(G)+"\n")
