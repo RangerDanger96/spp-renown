@@ -641,14 +641,21 @@ namespace cmangos_module
                 continue;
             }
 
+            // Front bots don't wait at the spirit healer on their own (they run back to their corpse), so the wave
+            // collects them wherever their ghost is and brings them back at their side's graveyard, like in a battleground
+            const bool frontBot = !player->isRealPlayer() && m_rvrDirectedBots.count(player->GetObjectGuid().GetCounter());
             const float dx = player->GetPositionX() - graveyard->x, dy = player->GetPositionY() - graveyard->y;
-            if (dx * dx + dy * dy > 25.0f * 25.0f)
+            if (!frontBot && dx * dx + dy * dy > 25.0f * 25.0f)
             {
                 continue;
             }
 
             player->ResurrectPlayer(1.0f, false);
             player->SpawnCorpseBones();
+            if (frontBot && dx * dx + dy * dy > 25.0f * 25.0f)
+            {
+                player->TeleportTo(graveyard->map_id, graveyard->x, graveyard->y, graveyard->z, player->GetOrientation());
+            }
             if (player->isRealPlayer())
             {
                 ChatHandler(player).PSendSysMessage("|cffffd100[Barrens Front]|r The spirit healer returns you to the fight.");
