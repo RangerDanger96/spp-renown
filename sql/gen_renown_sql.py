@@ -45,8 +45,8 @@ w("INSERT INTO gossip_menu_option (menu_id,id,option_icon,option_text,option_bro
 w("(59000,10,1,'Show me the Renown rewards.',0,3,4,0,0,0,0,0,'',0,0);")
 w("")
 import lowgear
-TIER_COST=[80,150,250,400,600,900]   # T1..T6 base Renown cost (chest/legs/two-hander)
-T0_COST=30                            # level 1-9 "Recruit's" set, no insignia needed
+TIER_COST=[500,750,1000,1400,1800,2500]   # T1..T6 base Renown cost (chest/legs/two-hander); ~400 Renown per BG
+T0_COST=300                           # level 1-9 "Recruit's" set (~6-7 BGs for a full set), no insignia needed
 SLOT_MULT={1:0.9,3:0.9,5:1.0,20:1.0,7:1.0,17:1.0,10:0.75,8:0.75,6:0.75,9:0.5,16:0.6,11:0.6,2:0.6,12:0.6,
            13:0.8,21:0.8,22:0.6,14:0.6,23:0.6,15:0.6,26:0.6,25:0.6,19:0.5}
 def cost(base,inv): return max(5,int(round(base*SLOT_MULT.get(inv,0.7)/5.0))*5)
