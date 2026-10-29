@@ -597,7 +597,12 @@ namespace cmangos_module
 
             // Mostly objectives the team doesn't hold, sometimes one of its own to defend; siege when it holds all three
             std::vector<Point> targets;
-            for (const RvRObjective& objective : m_rvrObjectives)
+            if (m_rvrSiegeTeam == bot->GetTeam() && urand(0, 3))
+            {
+                // Siege open: most of the side's bots storm the enemy base for the commander
+                targets.push_back(bot->GetTeam() == ALLIANCE ? RVR_HORDE_COMMAND : RVR_ALLIANCE_COMMAND);
+            }
+            else for (const RvRObjective& objective : m_rvrObjectives)
             {
                 if (objective.owner != bot->GetTeam() || !urand(0, 3))
                 {
