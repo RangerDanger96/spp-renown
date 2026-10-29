@@ -508,9 +508,21 @@ namespace cmangos_module
 
         const uint32 cap = GetConfig()->rvrBotsPerSide;     // 0 = no cap
         const uint32 wave = std::max<uint32>(1, GetConfig()->rvrBotsPerWave);
+
+        // Bots of each side already on the front, so the sides can be kept roughly even
+        uint32 presentBySide[2] = { 0, 0 };
+        for (Player* player : players)
+        {
+            if (!player->isRealPlayer() && player->GetLevel() <= GetConfig()->rvrMaxLevel && RvRIsMember(player->GetObjectGuid().GetCounter()))
+            {
+                ++presentBySide[player->GetTeam() == ALLIANCE ? 0 : 1];
+            }
+        }
+
         for (uint32 team : { (uint32)ALLIANCE, (uint32)HORDE })
         {
-            uint32 present = 0;
+            const uint32 present = presentBySide[team == ALLIANCE ? 0 : 1];
+            const uint32 otherPresent = presentBySide[team == ALLIANCE ? 1 : 0];
             std::vector<Player*> candidates;
             for (Player* player : players)
             {
@@ -521,7 +533,6 @@ namespace cmangos_module
 
                 if (RvRIsMember(player->GetObjectGuid().GetCounter()))
                 {
-                    ++present;
                     continue;
                 }
 
@@ -546,6 +557,12 @@ namespace cmangos_module
                 need = std::min<uint32>(need, present < cap ? cap - present : 0);
             }
 
+            // Don't let one side snowball: stop sending once it is a full wave ahead of the other
+            if (present >= otherPresent + wave)
+            {
+                need = 0;
+            }
+
             while (need-- > 0 && !candidates.empty())
             {
                 const size_t pick = urand(0, uint32(candidates.size() - 1));
@@ -564,8 +581,84 @@ namespace cmangos_module
     // to Ratchet and their quest hubs) and are walked from objective to objective instead.
     void RenownModule::RvRDirectBots(const std::vector<Player*>& players)
     {
+        // Orders: 0-2 = objective, 3 = own command post, 4 = enemy command post
+        enum { ORDER_HOME = 3, ORDER_ENEMY_BASE = 4, ORDER_NONE = 255 };
         const RenownModuleConfig* config = GetConfig();
         const uint32 share = std::min<uint32>(config->rvrBotShare, 100);
+        if (m_rvrObjectives.size() != 3)
+        {
+            return;
+        }
+
+        // ---- one plan per side, so its bots push together instead of scattering
+        struct Plan
+        {
+            uint8 attack = ORDER_NONE;      // where most of the side goes
+            std::vector<uint8> urgent;      // own objectives the enemy is taking right now / own base under siege
+            std::vector<uint8> held;        // own objectives to guard
+        };
+
+        auto makePlan = [&](uint32 team) -> Plan
+        {
+            Plan plan;
+            const uint32 enemy = team == ALLIANCE ? HORDE : ALLIANCE;
+            const uint8 ownTower = team == HORDE ? 0 : 2, enemyTower = team == HORDE ? 2 : 0, center = 1;
+            for (uint8 i = 0; i < 3; ++i)
+            {
+                const RvRObjective& o = m_rvrObjectives[i];
+                if (o.owner == team)
+                {
+                    plan.held.push_back(i);
+                    if (o.capTeam == enemy && o.progress > 0)
+                    {
+                        plan.urgent.push_back(i);
+                    }
+                }
+            }
+
+            if (m_rvrSiegeTeam == enemy)
+            {
+                plan.urgent.push_back(ORDER_HOME);      // the commander is out: protect him
+            }
+
+            if (m_rvrLockTeam)
+            {
+                plan.attack = ORDER_HOME;               // lake locked after a siege: regroup at home
+            }
+            else if (m_rvrSiegeTeam == team)
+            {
+                plan.attack = ORDER_ENEMY_BASE;         // siege open: storm the enemy commander
+            }
+            else if (m_rvrObjectives[ownTower].owner != team)
+            {
+                plan.attack = ownTower;                 // first secure our tower
+            }
+            else if (m_rvrObjectives[enemyTower].owner != team)
+            {
+                plan.attack = enemyTower;               // then the enemy's (needed before the center)
+            }
+            else if (m_rvrObjectives[center].owner != team)
+            {
+                plan.attack = center;                   // both towers held: the Oasis is open to us
+            }
+            // else: all three held, waiting for the siege to open, everyone guards
+
+            return plan;
+        };
+
+        const Plan plans[2] = { makePlan(ALLIANCE), makePlan(HORDE) };
+
+        auto orderPoint = [&](uint32 team, uint8 order) -> Point
+        {
+            if (order < 3)
+            {
+                return { m_rvrObjectives[order].x, m_rvrObjectives[order].y, m_rvrObjectives[order].z };
+            }
+
+            const bool home = order == ORDER_HOME;
+            return (team == ALLIANCE) == home ? RVR_ALLIANCE_COMMAND : RVR_HORDE_COMMAND;
+        };
+
         for (Player* bot : players)
         {
             if (bot->isRealPlayer())
@@ -581,6 +674,7 @@ namespace cmangos_module
             {
                 if (m_rvrDirectedBots.erase(botId))
                 {
+                    m_rvrBotOrders.erase(botId);
                     RvRBotFrontMode(bot, false);
                 }
                 continue;
@@ -589,34 +683,48 @@ namespace cmangos_module
             m_rvrDirectedBots.insert(botId);
             RvRBotFrontMode(bot, true);
 
-            if (!bot->IsAlive() || bot->IsInCombat() || bot->IsTaxiFlying() || bot->GetGroup() ||
-                bot->GetMotionMaster()->GetCurrentMovementGeneratorType() != IDLE_MOTION_TYPE || urand(0, 2))
+            // Leave bots alone while they fight, eat/drink, recover or are otherwise busy
+            if (!bot->IsAlive() || bot->IsInCombat() || bot->IsTaxiFlying() || bot->GetGroup() || !bot->IsStandState() ||
+                bot->GetHealthPercent() < 50.0f || (bot->GetPowerType() == POWER_MANA && bot->GetMaxPower(POWER_MANA) > 0 &&
+                bot->GetPower(POWER_MANA) * 100 < bot->GetMaxPower(POWER_MANA) * 30))
             {
-                continue;   // busy, or give it a moment before the next order (about every 15 seconds)
+                continue;
             }
 
-            // Mostly objectives the team doesn't hold, sometimes one of its own to defend; siege when it holds all three
-            std::vector<Point> targets;
-            if (m_rvrSiegeTeam == bot->GetTeam() && urand(0, 3))
+            // Pick this bot's order. Its role (fixed per bot) decides whether it attacks, defends or answers alarms.
+            const Plan& plan = plans[bot->GetTeam() == ALLIANCE ? 0 : 1];
+            const uint32 role = (botId / 100) % 10;
+            uint8 order = ORDER_NONE;
+            if (!plan.urgent.empty() && role < 4)
             {
-                // Siege open: most of the side's bots storm the enemy base for the commander
-                targets.push_back(bot->GetTeam() == ALLIANCE ? RVR_HORDE_COMMAND : RVR_ALLIANCE_COMMAND);
+                order = plan.urgent[botId % plan.urgent.size()];
             }
-            else for (const RvRObjective& objective : m_rvrObjectives)
+            else if (plan.attack != ORDER_NONE && (role < 8 || plan.held.empty()))
             {
-                if (objective.owner != bot->GetTeam() || !urand(0, 3))
-                {
-                    targets.push_back({ objective.x, objective.y, objective.z });
-                }
+                order = plan.attack;
+            }
+            else if (!plan.held.empty())
+            {
+                order = plan.held[botId % plan.held.size()];
+            }
+            else
+            {
+                order = ORDER_HOME;
             }
 
-            if (targets.empty())
+            const Point target = orderPoint(bot->GetTeam(), order);
+            const float dx = bot->GetPositionX() - target.x, dy = bot->GetPositionY() - target.y;
+            const bool arrived = dx * dx + dy * dy <= 20.0f * 20.0f;
+            auto it = m_rvrBotOrders.find(botId);
+            const bool changed = it == m_rvrBotOrders.end() || it->second != order;
+            const bool idle = bot->GetMotionMaster()->GetCurrentMovementGeneratorType() == IDLE_MOTION_TYPE;
+            if (!changed && (arrived || !idle))
             {
-                targets.push_back(bot->GetTeam() == ALLIANCE ? RVR_HORDE_COMMAND : RVR_ALLIANCE_COMMAND);
+                continue;   // on its way, or holding the position
             }
 
-            const Point& target = targets[urand(0, uint32(targets.size() - 1))];
-            const float angle = frand(0.0f, 6.28f), dist = frand(3.0f, 15.0f);
+            m_rvrBotOrders[botId] = order;
+            const float angle = frand(0.0f, 6.28f), dist = frand(3.0f, 14.0f);
             float x = target.x + std::cos(angle) * dist, y = target.y + std::sin(angle) * dist, z = target.z;
             bot->UpdateAllowedPositionZ(x, y, z);
             bot->GetMotionMaster()->MovePoint(0, x, y, z);
