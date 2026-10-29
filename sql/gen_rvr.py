@@ -144,7 +144,7 @@ q("")
 q("-- War Board (clone of the Wanted Board quest giver)")
 q("DROP TEMPORARY TABLE IF EXISTS tmp_gt;")
 q("CREATE TEMPORARY TABLE tmp_gt SELECT * FROM gameobject_template WHERE entry=2713;")
-q("UPDATE tmp_gt SET entry=190803, name='Barrens Front War Board', size=1.2;")
+q("UPDATE tmp_gt SET entry=190803, name='Barrens Front War Board', faction=0, size=1.2;")
 q("INSERT INTO gameobject_template SELECT * FROM tmp_gt;")
 q("DROP TEMPORARY TABLE IF EXISTS tmp_gt;")
 boards=[(5400100,-462.0,-2617.0,(-450.0,-2630.0)),(5400101,-2086.0,-3628.0,(-2093.0,-3639.0))]
@@ -213,7 +213,7 @@ def quest(entry,races,flags,cond,title,obj,reqs,details,offer,weekly=False):
           "Title,Details,Objectives,OfferRewardText,RequestItemsText,EndText,ObjectiveText1,ObjectiveText2,ObjectiveText3,ObjectiveText4,"
           "ReqCreatureOrGOId1,ReqCreatureOrGOId2,ReqCreatureOrGOId3,ReqCreatureOrGOId4,"
           "ReqCreatureOrGOCount1,ReqCreatureOrGOCount2,ReqCreatureOrGOCount3,ReqCreatureOrGOCount4,RewOrReqMoney,RewMoneyMaxLevel")
-    vals=[entry,2,17,1,0,10,41,races,cond,flags,1,
+    vals=[entry,2,17,1,255,10,41,races,cond,flags,1,
           f"'{esc(title)}'",f"'{esc(details)}'",f"'{esc(obj)}'",f"'{esc(offer)}'","'Report back when it is done, $N.'","''"]+[f"'{esc(t)}'" for t in otext]+reqid+reqcnt+[5000 if weekly else 2500,0]
     qrows.append(f"INSERT INTO quest_template ({cols}) VALUES ("+",".join(str(v) for v in vals)+");")
 for idx,th,ta,obj,reqs,dh,da,offer in DAILIES:
