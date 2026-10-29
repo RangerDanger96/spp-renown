@@ -8,7 +8,7 @@ RenownPvPDB = RenownPvPDB or {}
 BINDING_HEADER_RENOWN = "Renown"
 BINDING_NAME_RENOWN_PANEL = "Toggle the PvP panel"
 BINDING_NAME_RENOWN_MOUNT = "Field mount (summon / dismount)"
-BINDING_NAME_RENOWN_FRONT = "Travel to the Barrens Front"
+BINDING_NAME_RENOWN_FRONT = "Travel to your front (Barrens 1-19, Plaguelands 55-60)"
 
 local OBJECTIVES = { "Kolkar Watch", "Stagnant Oasis", "Raptor Grounds" }
 local TEAM_COLOR = {
@@ -129,12 +129,21 @@ end)
 launcher:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
 -- ---------------------------------------------------------------- panel
+-- Layout: title bar, Renown summary strip, two tabs (Battlegrounds / Fronts), footer actions.
+local PANEL_W, PANEL_H = 360, 452
+local GOLD = { 1, 0.82, 0 }
+
 local panel = CreateFrame("Frame", "RenownPvPPanel", UIParent)
-panel:SetWidth(300)
-panel:SetHeight(474)
+panel:SetWidth(PANEL_W)
+panel:SetHeight(PANEL_H)
 panel:SetFrameStrata("MEDIUM")
 panel:EnableMouse(true)
-Backdrop(panel)
+panel:SetBackdrop({
+    bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+    edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+    tile = true, tileSize = 32, edgeSize = 32,
+    insets = { left = 11, right = 12, top = 12, bottom = 11 },
+})
 panel:Hide()
 tinsert(UISpecialFrames, "RenownPvPPanel")   -- Escape closes it
 
@@ -148,142 +157,259 @@ local function PlacePanel()
     end
 end
 
+-- Title plate
+local titleBg = panel:CreateTexture(nil, "ARTWORK")
+titleBg:SetTexture("Interface\\DialogFrame\\UI-DialogBox-Header")
+titleBg:SetWidth(280)
+titleBg:SetHeight(64)
+titleBg:SetPoint("TOP", panel, "TOP", 0, 12)
+local title = Label(panel, "GameFontNormal", "Renown PvP")
+title:SetPoint("TOP", panel, "TOP", 0, -1)
+
 local close = CreateFrame("Button", nil, panel, "UIPanelCloseButton")
-close:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -2, -2)
+close:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -5, -5)
 
-local header = Label(panel, "GameFontNormalLarge", "Renown PvP")
-header:SetPoint("TOPLEFT", panel, "TOPLEFT", 14, -12)
+-- Small helpers for a consistent look
+local function Divider(parent, anchor, offsetY)
+    local t = parent:CreateTexture(nil, "ARTWORK")
+    t:SetTexture(1, 0.82, 0, 0.25)
+    t:SetHeight(1)
+    t:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, offsetY)
+    t:SetPoint("RIGHT", parent, "RIGHT", -18, 0)
+    return t
+end
 
--- Renown summary
-local rankText = Label(panel, "GameFontHighlight", "Renown: waiting for the server...")
-rankText:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -8)
+local function Card(parent, width, height)
+    local f = CreateFrame("Frame", nil, parent)
+    f:SetWidth(width)
+    f:SetHeight(height)
+    f:SetBackdrop({
+        bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true, tileSize = 16, edgeSize = 12,
+        insets = { left = 3, right = 3, top = 3, bottom = 3 },
+    })
+    f:SetBackdropColor(0.05, 0.05, 0.05, 0.75)
+    f:SetBackdropBorderColor(0.55, 0.45, 0.25, 0.9)
+    return f
+end
 
-local rankBar = CreateFrame("StatusBar", nil, panel)
-rankBar:SetWidth(270)
-rankBar:SetHeight(10)
-rankBar:SetPoint("TOPLEFT", rankText, "BOTTOMLEFT", 0, -4)
-rankBar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
-rankBar:SetStatusBarColor(0.80, 0.55, 0.10)
-rankBar:SetMinMaxValues(0, 1)
-rankBar:SetValue(0)
-local rankBarBg = rankBar:CreateTexture(nil, "BACKGROUND")
-rankBarBg:SetAllPoints(rankBar)
-rankBarBg:SetTexture(0, 0, 0, 0.6)
+local function Bar(parent, width, height)
+    local b = CreateFrame("StatusBar", nil, parent)
+    b:SetWidth(width)
+    b:SetHeight(height)
+    b:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
+    b:SetMinMaxValues(0, 1)
+    b:SetValue(0)
+    local bg = b:CreateTexture(nil, "BACKGROUND")
+    bg:SetAllPoints(b)
+    bg:SetTexture(0, 0, 0, 0.55)
+    local border = CreateFrame("Frame", nil, b)
+    border:SetPoint("TOPLEFT", b, "TOPLEFT", -3, 3)
+    border:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", 3, -3)
+    border:SetBackdrop({ edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 8 })
+    border:SetBackdropBorderColor(0.6, 0.5, 0.3, 0.9)
+    return b
+end
 
-local pointsText = Label(panel, "GameFontHighlightSmall", "")
-pointsText:SetPoint("TOPLEFT", rankBar, "BOTTOMLEFT", 0, -4)
+-- ---- Summary strip: faction emblem, rank, progress, Renown to spend
+local emblem = panel:CreateTexture(nil, "ARTWORK")
+emblem:SetWidth(40)
+emblem:SetHeight(40)
+emblem:SetPoint("TOPLEFT", panel, "TOPLEFT", 22, -30)
+emblem:SetTexture("Interface\\Icons\\INV_BannerPVP_02")
+local emblemBorder = panel:CreateTexture(nil, "OVERLAY")
+emblemBorder:SetWidth(70)
+emblemBorder:SetHeight(70)
+emblemBorder:SetPoint("CENTER", emblem, "CENTER", 0, 0)
+emblemBorder:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
+emblemBorder:SetBlendMode("ADD")
+emblemBorder:SetVertexColor(0.9, 0.7, 0.2, 0.7)
 
--- Battlegrounds
-local bgHeader = Label(panel, "GameFontNormal", "Battlegrounds")
-bgHeader:SetPoint("TOPLEFT", pointsText, "BOTTOMLEFT", 0, -12)
-local bracketText = Label(panel, "GameFontDisableSmall", "")
-bracketText:SetPoint("LEFT", bgHeader, "RIGHT", 8, 0)
+local rankText = Label(panel, "GameFontNormalLarge", "Renown")
+rankText:SetPoint("TOPLEFT", emblem, "TOPRIGHT", 12, -1)
+local rankSub = Label(panel, "GameFontHighlightSmall", "Waiting for the server...")
+rankSub:SetPoint("TOPLEFT", rankText, "BOTTOMLEFT", 0, -3)
 
+local rankBar = Bar(panel, 186, 9)
+rankBar:SetPoint("TOPLEFT", rankSub, "BOTTOMLEFT", 2, -6)
+rankBar:SetStatusBarColor(0.85, 0.6, 0.12)
+
+local spendLabel = Label(panel, "GameFontDisableSmall", "TO SPEND")
+spendLabel:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -24, -34)
+spendLabel:SetJustifyH("RIGHT")
+local spendText = Label(panel, "GameFontNormalLarge", "-")
+spendText:SetPoint("TOPRIGHT", spendLabel, "BOTTOMRIGHT", 0, -3)
+spendText:SetJustifyH("RIGHT")
+
+local summaryLine = Divider(panel, emblem, -14)
+
+-- ---- Tabs
+local tabs, pages = {}, {}
+local function SelectTab(index)
+    for i = 1, table.getn(tabs) do
+        if i == index then
+            tabs[i]:LockHighlight()
+            tabs[i].text:SetTextColor(1, 0.82, 0)
+            pages[i]:Show()
+        else
+            tabs[i]:UnlockHighlight()
+            tabs[i].text:SetTextColor(0.7, 0.7, 0.7)
+            pages[i]:Hide()
+        end
+    end
+    RenownPvPDB.tab = index
+end
+
+local function Tab(index, label)
+    local t = CreateFrame("Button", "RenownPvPTab" .. index, panel)
+    t:SetWidth(156)
+    t:SetHeight(24)
+    t:SetPoint("TOPLEFT", summaryLine, "BOTTOMLEFT", (index - 1) * 162, -8)
+    t:SetHighlightTexture("Interface\\PaperDollInfoFrame\\UI-Character-Tab-Highlight")
+    local bg = t:CreateTexture(nil, "BACKGROUND")
+    bg:SetAllPoints(t)
+    bg:SetTexture(1, 1, 1, 0.06)
+    t.text = Label(t, "GameFontNormal", label)
+    t.text:SetPoint("CENTER", t, "CENTER", 0, 0)
+    t:SetScript("OnClick", function() SelectTab(index) end)
+    tabs[index] = t
+    local p = CreateFrame("Frame", nil, panel)
+    p:SetPoint("TOPLEFT", t, "BOTTOMLEFT", 0, -8)
+    p:SetWidth(PANEL_W - 36)
+    p:SetHeight(270)
+    pages[index] = p
+    return p
+end
+
+local bgPage = Tab(1, "Battlegrounds")
+local frontPage = Tab(2, "Fronts")
+
+-- ---- Battlegrounds page
+local bracketText = Label(bgPage, "GameFontDisableSmall", "")
+bracketText:SetPoint("TOPLEFT", bgPage, "TOPLEFT", 2, 0)
+local BG_ICONS = { wsg = "Interface\\Icons\\INV_Misc_Rune_07", ab = "Interface\\Icons\\INV_Jewelry_Amulet_07", av = "Interface\\Icons\\INV_Jewelry_Necklace_21" }
 local bgRows = {}
 for i = 1, table.getn(BATTLEGROUNDS) do
     local def = BATTLEGROUNDS[i]
-    local row = {}
-    row.name = Label(panel, "GameFontHighlightSmall", def.name)
-    row.name:SetPoint("TOPLEFT", bgHeader, "BOTTOMLEFT", 4, -8 - (i - 1) * 24)
-    row.status = Label(panel, "GameFontDisableSmall", "")
-    row.status:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -1)
-    row.button = Button(panel, "RenownPvPQueue" .. i, "Queue", 64, function() Command(".renown queue " .. this.key) end,
-        "Queue for " .. def.name .. " from anywhere (levels " .. def.levels .. ")")
+    local card = Card(bgPage, PANEL_W - 36, 52)
+    card:SetPoint("TOPLEFT", bgPage, "TOPLEFT", 0, -16 - (i - 1) * 58)
+    local icon = card:CreateTexture(nil, "ARTWORK")
+    icon:SetWidth(32)
+    icon:SetHeight(32)
+    icon:SetPoint("LEFT", card, "LEFT", 10, 0)
+    icon:SetTexture(BG_ICONS[def.key])
+    local row = { card = card }
+    row.name = Label(card, "GameFontNormal", def.name)
+    row.name:SetPoint("TOPLEFT", icon, "TOPRIGHT", 10, -2)
+    row.status = Label(card, "GameFontHighlightSmall", "")
+    row.status:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -4)
+    row.button = Button(card, "RenownPvPQueue" .. i, "Join Queue", 92, function() Command(".renown queue " .. this.key) end,
+        "Queue for " .. def.name .. " from anywhere (levels " .. def.levels .. "). You are bolstered to the top of your bracket.")
     row.button.key = def.key
-    row.button:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -14, -118 - (i - 1) * 24)
+    row.button:SetPoint("RIGHT", card, "RIGHT", -10, 0)
     bgRows[i] = row
 end
+local bgHint = Label(bgPage, "GameFontDisableSmall", "Battlegrounds pay Renown, PvP experience and loot bags.")
+bgHint:SetPoint("TOPLEFT", bgRows[table.getn(BATTLEGROUNDS)].card, "BOTTOMLEFT", 2, -8)
 
--- Barrens Front
-local frontHeader = Label(panel, "GameFontNormal", "Barrens Front")
-frontHeader:SetPoint("TOPLEFT", bgHeader, "BOTTOMLEFT", 0, -84)
-local frontSub = Label(panel, "GameFontDisableSmall", "tier 1 RvR, levels 1-19")
-frontSub:SetPoint("LEFT", frontHeader, "RIGHT", 8, 0)
+-- ---- Fronts page: Barrens (tier 1) and Plaguelands (tier 4)
+local barrensCard = Card(frontPage, PANEL_W - 36, 172)
+barrensCard:SetPoint("TOPLEFT", frontPage, "TOPLEFT", 0, 0)
+local barrensTitle = Label(barrensCard, "GameFontNormal", "Barrens Front")
+barrensTitle:SetPoint("TOPLEFT", barrensCard, "TOPLEFT", 10, -9)
+local barrensTier = Label(barrensCard, "GameFontDisableSmall", "TIER 1  |  LEVELS 1-19")
+barrensTier:SetPoint("TOPRIGHT", barrensCard, "TOPRIGHT", -10, -11)
+barrensTier:SetJustifyH("RIGHT")
 
 local frontRows = {}
 for i = 1, 3 do
     local row = {}
-    row.swatch = panel:CreateTexture(nil, "ARTWORK")
+    row.swatch = barrensCard:CreateTexture(nil, "ARTWORK")
     row.swatch:SetWidth(10)
     row.swatch:SetHeight(10)
-    row.swatch:SetPoint("TOPLEFT", frontHeader, "BOTTOMLEFT", 4, -8 - (i - 1) * 16)
+    row.swatch:SetPoint("TOPLEFT", barrensCard, "TOPLEFT", 12, -32 - (i - 1) * 17)
     row.swatch:SetTexture(0.6, 0.6, 0.6)
-    row.label = Label(panel, "GameFontHighlightSmall", OBJECTIVES[i])
-    row.label:SetPoint("LEFT", row.swatch, "RIGHT", 6, 0)
-    row.progress = CreateFrame("StatusBar", nil, panel)
-    row.progress:SetWidth(80)
-    row.progress:SetHeight(8)
-    row.progress:SetPoint("LEFT", row.swatch, "LEFT", 186, 0)
-    row.progress:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
+    row.label = Label(barrensCard, "GameFontHighlightSmall", OBJECTIVES[i])
+    row.label:SetPoint("LEFT", row.swatch, "RIGHT", 7, 0)
+    row.owner = Label(barrensCard, "GameFontDisableSmall", "")
+    row.owner:SetPoint("LEFT", row.swatch, "LEFT", 130, 0)
+    row.progress = Bar(barrensCard, 90, 7)
+    row.progress:SetPoint("RIGHT", barrensCard, "RIGHT", -14, 0)
+    row.progress:SetPoint("TOP", row.swatch, "TOP", 0, -1)
     row.progress:SetMinMaxValues(0, 100)
     row.progress:Hide()
     frontRows[i] = row
 end
 
-local frontStatus = Label(panel, "GameFontHighlightSmall", "Hold both towers to take the Oasis")
-frontStatus:SetPoint("TOPLEFT", frontHeader, "BOTTOMLEFT", 4, -60)
-frontStatus:SetWidth(270)
+local frontStatus = Label(barrensCard, "GameFontHighlightSmall", "")
+frontStatus:SetPoint("TOPLEFT", barrensCard, "TOPLEFT", 12, -88)
+frontStatus:SetWidth(PANEL_W - 60)
 
-local frontJoin = Button(panel, "RenownPvPFrontJoin", "Go to the Front", 126, function() Command(".renown rvr join") end,
-    "Travel to the Crossroads (Horde) or Northwatch Hold (Alliance). Levels 1-19; you are bolstered to 19 on the front.")
-frontJoin:SetPoint("TOPLEFT", frontStatus, "BOTTOMLEFT", -4, -8)
-local frontLeave = Button(panel, "RenownPvPFrontLeave", "Leave", 70, function() Command(".renown rvr leave") end,
+local frontJoin = Button(barrensCard, "RenownPvPFrontJoin", "Go to the Front", 120, function() Command(".renown rvr join") end,
+    "Travel to the Crossroads (Horde) or Northwatch Hold (Alliance). You are bolstered to 19 on the front.")
+frontJoin:SetPoint("BOTTOMLEFT", barrensCard, "BOTTOMLEFT", 10, 36)
+local frontLeave = Button(barrensCard, "RenownPvPFrontLeave", "Leave", 70, function() Command(".renown rvr leave") end,
     "Return to where you were before going to the front.")
 frontLeave:SetPoint("LEFT", frontJoin, "RIGHT", 6, 0)
-local frontInfo = Button(panel, "RenownPvPFrontInfo", "Status", 64, function() Command(".renown rvr status") end,
-    "Print the current state of the front in chat.")
+local frontInfo = Button(barrensCard, "RenownPvPFrontInfo", "Status", 70, function() Command(".renown rvr status") end,
+    "Print the state of the front in chat.")
 frontInfo:SetPoint("LEFT", frontLeave, "RIGHT", 6, 0)
-local frontWarband = Button(panel, "RenownPvPWarband", "Warband", 90, function() Command(".renown warband") end,
-    "Call up to four front soldiers of your side into your party. They follow and fight with you while you are on the front.")
-frontWarband:SetPoint("TOPLEFT", frontJoin, "BOTTOMLEFT", 0, -4)
-local frontDismiss = Button(panel, "RenownPvPWarbandDismiss", "Dismiss", 70, function() Command(".renown warband dismiss") end,
+local frontWarband = Button(barrensCard, "RenownPvPWarband", "Warband", 120, function() Command(".renown warband") end,
+    "Call up to four soldiers of your side into your party. They follow and fight with you while you are on a front.")
+frontWarband:SetPoint("BOTTOMLEFT", barrensCard, "BOTTOMLEFT", 10, 10)
+local frontDismiss = Button(barrensCard, "RenownPvPWarbandDismiss", "Dismiss", 70, function() Command(".renown warband dismiss") end,
     "Send your warband back to the front lines.")
 frontDismiss:SetPoint("LEFT", frontWarband, "RIGHT", 6, 0)
-local frontSession = Button(panel, "RenownPvPSession", "My session", 100, function() Command(".renown session") end,
-    "Kills, captures, Renown and levels earned since you arrived on the front.")
-frontSession:SetPoint("LEFT", frontDismiss, "RIGHT", 6, 0)
 
--- Field mount
-local mountHeader = Label(panel, "GameFontNormal", "Field mount")
-mountHeader:SetPoint("TOPLEFT", frontWarband, "BOTTOMLEFT", 4, -14)
-local mountText = Label(panel, "GameFontDisableSmall", "Your racial mount at +30% speed, levels 1-39")
-mountText:SetPoint("TOPLEFT", mountHeader, "BOTTOMLEFT", 0, -3)
-local mountButton = Button(panel, "RenownPvPMount", "Mount", 70, function() RenownPvP_Mount() end,
-    "Summon or dismiss your field mount. You can also bind a key (Key Bindings > Renown) or type /fm.")
-mountButton:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -14, -368)
-
--- Plaguelands Front (tier 4)
-local t4Header = Label(panel, "GameFontNormal", "Plaguelands Front")
-t4Header:SetPoint("TOPLEFT", mountText, "BOTTOMLEFT", 0, -14)
-local t4Sub = Label(panel, "GameFontDisableSmall", "tier 4 RvR, levels 55-60")
-t4Sub:SetPoint("LEFT", t4Header, "RIGHT", 8, 0)
-local t4Join = Button(panel, "RenownPvPT4Join", "Go to the Plaguelands", 150, function() Command(".renown t4 join") end,
-    "Travel to your keep in the Eastern Plaguelands: Darrowshire (Alliance) or Northdale (Horde). Hold three towers to besiege the enemy keep; the winners get Darkness Falls (Stratholme).")
-t4Join:SetPoint("TOPLEFT", t4Header, "BOTTOMLEFT", -4, -6)
-local t4Status = Button(panel, "RenownPvPT4Status", "Status", 64, function() Command(".renown t4 status") end,
+local t4Card = Card(frontPage, PANEL_W - 36, 92)
+t4Card:SetPoint("TOPLEFT", barrensCard, "BOTTOMLEFT", 0, -8)
+local t4Title = Label(t4Card, "GameFontNormal", "Plaguelands Front")
+t4Title:SetPoint("TOPLEFT", t4Card, "TOPLEFT", 10, -9)
+local t4Tier = Label(t4Card, "GameFontDisableSmall", "TIER 4  |  LEVELS 55-60")
+t4Tier:SetPoint("TOPRIGHT", t4Card, "TOPRIGHT", -10, -11)
+t4Tier:SetJustifyH("RIGHT")
+local t4Text = Label(t4Card, "GameFontHighlightSmall", "Take the four towers, hold three to besiege the enemy keep. The winners claim Stratholme (Darkness Falls).")
+t4Text:SetPoint("TOPLEFT", t4Card, "TOPLEFT", 12, -28)
+t4Text:SetWidth(PANEL_W - 60)
+local t4Join = Button(t4Card, "RenownPvPT4Join", "Go to the Plaguelands", 150, function() Command(".renown t4 join") end,
+    "Travel to your keep: Darrowshire (Alliance) or Northdale (Horde). Levels 55-59 are bolstered to 60.")
+t4Join:SetPoint("BOTTOMLEFT", t4Card, "BOTTOMLEFT", 10, 10)
+local t4Status = Button(t4Card, "RenownPvPT4Status", "Status", 70, function() Command(".renown t4 status") end,
     "Towers, sieges and who holds Darkness Falls.")
 t4Status:SetPoint("LEFT", t4Join, "RIGHT", 6, 0)
 
+-- ---- Footer: field mount and session report
+local footerLine = panel:CreateTexture(nil, "ARTWORK")
+footerLine:SetTexture(1, 0.82, 0, 0.25)
+footerLine:SetHeight(1)
+footerLine:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 18, 46)
+footerLine:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -18, 46)
+local mountButton = Button(panel, "RenownPvPMount", "Field Mount", 104, function() RenownPvP_Mount() end,
+    "Your racial mount at +30% speed for levels 1-39. Bind a key under Key Bindings > Renown, or type /fm.")
+mountButton:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 20, 18)
+local sessionButton = Button(panel, "RenownPvPSession", "My Session", 104, function() Command(".renown session") end,
+    "Kills, captures, Renown and levels since you arrived on a front.")
+sessionButton:SetPoint("LEFT", mountButton, "RIGHT", 6, 0)
+local mountText = Label(panel, "GameFontDisableSmall", "")
+mountText:SetPoint("LEFT", sessionButton, "RIGHT", 10, 0)
+mountText:SetWidth(100)
+
+-- ---------------------------------------------------------------- refresh
 local function RefreshRenown()
     local s = RenownBar_State
     if not s then return end
+    rankText:SetText("Rank " .. s.rank .. "  |cffffffff" .. (s.title or "") .. "|r")
     if s.maxed then
-        rankText:SetText("Rank " .. s.rank .. " - " .. s.title .. "  |cff88ff88(max)|r")
+        rankSub:SetText("|cff88ff88Highest rank reached|r")
         rankBar:SetMinMaxValues(0, 1)
         rankBar:SetValue(1)
     else
-        rankText:SetText("Rank " .. s.rank .. " - " .. s.title)
         rankBar:SetMinMaxValues(0, math.max(s.needed or 1, 1))
         rankBar:SetValue(s.current or 0)
+        rankSub:SetText((s.current or 0) .. " / " .. (s.needed or "?") .. " to rank " .. (s.nextRank or (s.rank + 1)))
     end
-    local line = ""
-    if not s.maxed and s.needed then
-        line = (s.current or 0) .. " / " .. s.needed .. " to rank " .. (s.nextRank or (s.rank + 1)) .. "    "
-    end
-    if s.spendable then
-        line = line .. "|cffffd100" .. s.spendable .. " Renown to spend|r"
-    end
-    pointsText:SetText(line)
+    spendText:SetText(s.spendable or 0)
 end
 
 local function FormatWait(ms)
@@ -293,7 +419,7 @@ local function FormatWait(ms)
 end
 
 local function RefreshQueues()
-    bracketText:SetText("your bracket: " .. MyBracket())
+    bracketText:SetText("YOUR BRACKET: " .. MyBracket())
     local level = UnitLevel("player") or 1
     for i = 1, table.getn(BATTLEGROUNDS) do
         local def = BATTLEGROUNDS[i]
@@ -305,10 +431,10 @@ local function RefreshQueues()
                 if status == "queued" then
                     queued = true
                     local waited = GetBattlefieldTimeWaited and GetBattlefieldTimeWaited(q) or 0
-                    text = "|cffffd100Queued" .. FormatWait(waited) .. "|r"
+                    text = "|cffffd100In queue" .. FormatWait(waited) .. "|r"
                 elseif status == "confirm" then
                     queued = true
-                    text = "|cff00ff00Ready! Enter from the popup|r"
+                    text = "|cff00ff00Ready - enter from the popup|r"
                 elseif status == "active" then
                     active = true
                     text = "|cff00ff00In battle|r"
@@ -317,7 +443,7 @@ local function RefreshQueues()
         end
         if text == "" then
             if level < def.minLevel then
-                text = "Level " .. def.minLevel .. "+"
+                text = "|cff888888Requires level " .. def.minLevel .. "|r"
             else
                 text = "Levels " .. def.levels
             end
@@ -334,7 +460,7 @@ local function RefreshFront()
         local c = TEAM_COLOR[owner] or TEAM_COLOR[0]
         row.swatch:SetTexture(c[1], c[2], c[3])
         local fortified = math.mod(math.floor((front.fort or 0) / ({ 1, 2, 4 })[i]), 2) == 1
-        row.label:SetText(OBJECTIVES[i] .. "  |cffaaaaaa" .. (TEAM_NAME[owner] or "?") .. "|r" .. (fortified and "  |cffffd100fortified|r" or ""))
+        row.owner:SetText((TEAM_NAME[owner] or "?") .. (fortified and "  |cffffd100fortified|r" or ""))
         if front.cap[i] > 0 and front.pct[i] > 0 then
             local cc = TEAM_COLOR[front.cap[i]]
             row.progress:SetStatusBarColor(cc[1], cc[2], cc[3])
@@ -345,7 +471,7 @@ local function RefreshFront()
         end
     end
     if front.lock > 0 then
-        frontStatus:SetText(TEAM_NAME[front.lock] .. " victory! The front reopens in " .. math.ceil(front.lockSecs / 60) .. " min.")
+        frontStatus:SetText("|cff88ff88" .. TEAM_NAME[front.lock] .. " victory.|r The front reopens in " .. math.ceil(front.lockSecs / 60) .. " min.")
     elseif front.siege > 0 then
         frontStatus:SetText("|cffff8000Siege!|r The " .. TEAM_NAME[front.siege] .. " is assaulting the enemy commander.")
     elseif front.underdog and front.underdog > 0 then
@@ -357,18 +483,18 @@ local function RefreshFront()
     end
     local level = UnitLevel("player") or 1
     if level > 19 then frontJoin:Disable() else frontJoin:Enable() end
-    if front.inLake and level <= 19 then frontWarband:Enable() else frontWarband:Disable() end
-    if level >= 55 then t4Join:Enable(); frontWarband:Enable() else t4Join:Disable() end
+    if level >= 55 then t4Join:Enable() else t4Join:Disable() end
+    if (front.inLake and level <= 19) or level >= 55 then frontWarband:Enable() else frontWarband:Disable() end
 end
 
 local function RefreshMount()
     local level = UnitLevel("player") or 1
     if level > 39 then
         mountButton:Disable()
-        mountText:SetText("Levels 1-39 only. Visit a mount vendor at 40!")
+        mountText:SetText("Levels 1-39")
     else
         mountButton:Enable()
-        mountText:SetText("Your racial mount at +30% speed, levels 1-39")
+        mountText:SetText("")
     end
 end
 
@@ -386,6 +512,10 @@ function RenownPvP_Toggle()
         panel:Hide()
     else
         PlacePanel()
+        if UnitFactionGroup and UnitFactionGroup("player") == "Horde" then
+            emblem:SetTexture("Interface\\Icons\\INV_BannerPVP_01")
+        end
+        SelectTab(RenownPvPDB.tab or ((UnitLevel("player") or 1) <= 19 and 2 or 1))
         panel:Show()
         RenownPvP_Refresh()
     end
@@ -396,7 +526,11 @@ function RenownPvP_Mount()
 end
 
 function RenownPvP_Front()
-    Command(".renown rvr join")
+    if (UnitLevel("player") or 1) >= 55 then
+        Command(".renown t4 join")
+    else
+        Command(".renown rvr join")
+    end
 end
 
 launcher:SetScript("OnClick", function()

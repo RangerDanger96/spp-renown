@@ -2788,18 +2788,15 @@ Mangosbot_EventFrame:SetScript("OnEvent", function(self)
     end
 
     if (event == "PLAYER_TARGET_CHANGED") then
+        -- Renown realm: the bot panel no longer opens just by targeting a bot. Open it from the right-click
+        -- menu ("Bot Control") on the bot's portrait or name; it closes when you target someone else.
         local name = GetUnitName("target")
-        local self = GetUnitName("player")
-        if (CurrentBot == nil and (name == nil or not UnitExists("target") or UnitIsEnemy("target", "player") or not UnitIsPlayer("target"))) then
+        if (Mangosbot_ManualBot ~= nil and name ~= Mangosbot_ManualBot) then
+            Mangosbot_ManualBot = nil
+            if (CurrentBot ~= nil and CurrentBot ~= name) then CurrentBot = nil end
             SelectedBotPanel:Hide()
-        else
-            if (CurrentBot ~= name) then CurrentBot = nil end
-			if (LastBot ~= name) then
-            	QuerySelectedBot(name)
-			end
         end
-
-		LastBot = name
+        LastBot = name
     end
 
     if (event == "CHAT_MSG_SYSTEM" or event == "PARTY_MEMBERS_CHANGED") then
@@ -3129,9 +3126,9 @@ Mangosbot_EventFrame:SetScript("OnEvent", function(self)
             SelectedBotPanel:Hide()
             return
         end
-        local selected = GetUnitName("target")
+        local selected = Mangosbot_ManualBot
         if (CurrentBot ~= nil) then selected = CurrentBot end
-        if (sender == selected) then
+        if (selected ~= nil and sender == selected) then
             SelectedBotPanel:Show()
 
             local tmp, class = "Unknown";
@@ -3478,3 +3475,32 @@ function botCount()
 end
 
 print("MangosBOT Addon is loaded");
+
+-- Renown realm: "Bot Control" entry in the unit right-click menus opens the bot panel for that character
+Mangosbot_ManualBot = nil
+UnitPopupButtons["MANGOSBOT_CONTROL"] = { text = "Bot Control", dist = 0 }
+for _, menu in ipairs({ "PLAYER", "PARTY", "RAID", "FRIEND" }) do
+    if (UnitPopupMenus[menu]) then
+        local list = UnitPopupMenus[menu]
+        local pos = table.getn(list) + 1
+        for i = 1, table.getn(list) do
+            if (list[i] == "CANCEL") then pos = i break end
+        end
+        table.insert(list, pos, "MANGOSBOT_CONTROL")
+    end
+end
+local Mangosbot_OrigUnitPopupOnClick = UnitPopup_OnClick
+UnitPopup_OnClick = function()
+    if (this.value == "MANGOSBOT_CONTROL") then
+        local dropdownFrame = getglobal(UIDROPDOWNMENU_INIT_MENU)
+        local name = dropdownFrame and dropdownFrame.name
+        if ((name == nil or name == "") and dropdownFrame and dropdownFrame.unit) then name = UnitName(dropdownFrame.unit) end
+        if (name ~= nil and name ~= "") then
+            Mangosbot_ManualBot = name
+            QuerySelectedBot(name)
+        end
+        CloseDropDownMenus()
+        return
+    end
+    Mangosbot_OrigUnitPopupOnClick()
+end
