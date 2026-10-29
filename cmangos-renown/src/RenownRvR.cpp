@@ -169,6 +169,12 @@ namespace cmangos_module
 
     void RenownModule::RvRReset()
     {
+        {
+            std::lock_guard<std::mutex> lock(m_frontMutex);
+            m_frontCycle.clear();
+            m_frontFirstBlood = false;
+        }
+
         RvRStopSiege();
         m_rvrLockTeam = 0;
         m_rvrLockUntil = 0;
@@ -197,6 +203,7 @@ namespace cmangos_module
         m_rvrSiegeTeam = team;
         sGameEventMgr.StartEvent(team == HORDE ? RVR_EVENT_SIEGE_NORTHWATCH : RVR_EVENT_SIEGE_CROSSROADS, true);
         m_rvrSiegeLog.push_back(time(nullptr));
+        FrontOnSiege(team);
 
         std::ostringstream text;
         text << "|cffffd100[Barrens Front]|r The " << TeamName(team) << " holds the whole front! "
@@ -239,6 +246,7 @@ namespace cmangos_module
         RvRAnnounce(text.str(), true);
 
         RvRAwardBags(team);
+        FrontOnVictory(team);
         m_rvrDirty = true;
     }
 
@@ -345,6 +353,18 @@ namespace cmangos_module
         message << "/" << TeamState(m_rvrSiegeTeam) << "/" << TeamState(m_rvrLockTeam) << "/"
                 << (m_rvrLockUntil > now ? uint32(m_rvrLockUntil - now) : 0) << "/"
                 << (RvRIsMember(player->GetObjectGuid().GetCounter()) ? 1 : 0);
+
+        // Front life: underdog side and fortified objectives (bit mask)
+        uint32 fortified = 0;
+        for (size_t i = 0; i < m_rvrObjectives.size(); ++i)
+        {
+            if (m_rvrObjectives[i].fortifiedUntil > now)
+            {
+                fortified |= 1u << i;
+            }
+        }
+
+        message << "/" << TeamState(m_frontUnderdog) << "/" << fortified;
         SendAddon(player, message.str());
     }
 
@@ -458,6 +478,7 @@ namespace cmangos_module
         }
 
         player->UpdatePvP(true, true);
+        FrontEnter(player);
         if (player->isRealPlayer())
         {
             ChatHandler(player).PSendSysMessage("|cffffd100[Barrens Front]|r You entered the tier 1 RvR lake. Capture Kolkar Watch, the Stagnant Oasis and the Raptor Grounds!");
@@ -490,6 +511,7 @@ namespace cmangos_module
             }
         }
 
+        FrontLeave(player);
         if (player->isRealPlayer())
         {
             RvRSendStatus(player);
@@ -544,6 +566,10 @@ namespace cmangos_module
 
             // Over strength (players left, or the lake is locked): send a few spare bots home each time
             uint32 limit = m_rvrLockTeam ? std::min<uint32>(target, config->rvrFrontBotsIdle) : target;
+            if (team == m_frontUnderdog)
+            {
+                limit += 5;   // underdog: a few more soldiers for the side that is behind
+            }
             if (present[side] > limit + 4)
             {
                 uint32 release = std::min<uint32>(present[side] - limit, wave);
@@ -576,7 +602,7 @@ namespace cmangos_module
             }
 
             // Don't let one side snowball: stop sending once it is a full wave ahead of the other
-            if (present[side] >= present[1 - side] + wave)
+            if (team != m_frontUnderdog && present[side] >= present[1 - side] + wave)
             {
                 continue;
             }
@@ -896,7 +922,12 @@ namespace cmangos_module
 
             // Front bots don't wait at the spirit healer on their own (they run back to their corpse), so the wave
             // collects them wherever their ghost is and brings them back at their side's graveyard, like in a battleground
-            const bool frontBot = !player->isRealPlayer() && m_rvrDirectedBots.count(player->GetObjectGuid().GetCounter());
+            bool frontBot = !player->isRealPlayer() && m_rvrDirectedBots.count(player->GetObjectGuid().GetCounter());
+            if (!frontBot && !player->isRealPlayer())
+            {
+                std::lock_guard<std::mutex> lock(m_frontMutex);
+                frontBot = FrontIsWarbandBot(player->GetObjectGuid().GetCounter());
+            }
             const float dx = player->GetPositionX() - graveyard->x, dy = player->GetPositionY() - graveyard->y;
             if (!frontBot && dx * dx + dy * dy > 25.0f * 25.0f)
             {
@@ -905,6 +936,7 @@ namespace cmangos_module
 
             player->ResurrectPlayer(1.0f, false);
             player->SpawnCorpseBones();
+            FrontProtect(player);
             if (frontBot && dx * dx + dy * dy > 25.0f * 25.0f)
             {
                 player->TeleportTo(graveyard->map_id, graveyard->x, graveyard->y, graveyard->z, player->GetOrientation());
@@ -1119,6 +1151,10 @@ namespace cmangos_module
             if (!seen.count(*itr))
             {
                 m_rvrChickens.erase(*itr);
+                {
+                    std::lock_guard<std::mutex> lock(m_frontMutex);
+                    m_frontSessions.erase(*itr);
+                }
                 itr = m_rvrMembers.erase(itr);
             }
             else
@@ -1193,20 +1229,17 @@ namespace cmangos_module
                     {
                         o.capTeam = team;
                         o.progress = 0;
+                        FrontOnAssault(i, team);
                     }
 
-                    o.progress += diff;
+                    o.progress += uint32(diff * FrontCaptureRate(i, team));
                     m_rvrDirty = true;
                     if (o.progress >= captureMs)
                     {
                         const uint32 previous = o.owner;
                         RvRSetOwner(i, team);
                         m_rvrCaptureLog.push_back(time(nullptr));
-
-                        std::ostringstream text;
-                        text << "|cffffd100[Barrens Front]|r The " << TeamName(team) << " has captured " << o.name
-                             << (previous ? " from the " : "") << (previous ? TeamName(previous) : "") << "!";
-                        RvRAnnounce(text.str());
+                        FrontOnCapture(i, team, previous, nearby[team == ALLIANCE ? 0 : 1]);
 
                         for (Player* player : nearby[team == ALLIANCE ? 0 : 1])
                         {
@@ -1316,6 +1349,9 @@ namespace cmangos_module
                 RvRSpiritWave(players);
             }
         }
+
+        // Field orders, caravans, heroes, underdog, warbands, criers...
+        FrontUpdate(diff, players, members);
 
         // Status for the addon
         m_rvrStatusTimer += diff;

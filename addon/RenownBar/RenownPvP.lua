@@ -24,7 +24,7 @@ local BATTLEGROUNDS = {
 }
 local BRACKETS = { "1-9", "10-19", "20-29", "30-39", "40-49", "50-59", "60" }
 
-local front = { owners = { 0, 0, 0 }, cap = { 0, 0, 0 }, pct = { 0, 0, 0 }, siege = 0, lock = 0, lockSecs = 0, inLake = false }
+local front = { owners = { 0, 0, 0 }, cap = { 0, 0, 0 }, pct = { 0, 0, 0 }, siege = 0, lock = 0, lockSecs = 0, inLake = false, underdog = 0, fort = 0 }
 
 local function Command(text)
     SendChatMessage(text, "SAY")
@@ -131,7 +131,7 @@ launcher:SetScript("OnLeave", function() GameTooltip:Hide() end)
 -- ---------------------------------------------------------------- panel
 local panel = CreateFrame("Frame", "RenownPvPPanel", UIParent)
 panel:SetWidth(300)
-panel:SetHeight(392)
+panel:SetHeight(420)
 panel:SetFrameStrata("MEDIUM")
 panel:EnableMouse(true)
 Backdrop(panel)
@@ -233,15 +233,24 @@ frontLeave:SetPoint("LEFT", frontJoin, "RIGHT", 6, 0)
 local frontInfo = Button(panel, "RenownPvPFrontInfo", "Status", 64, function() Command(".renown rvr status") end,
     "Print the current state of the front in chat.")
 frontInfo:SetPoint("LEFT", frontLeave, "RIGHT", 6, 0)
+local frontWarband = Button(panel, "RenownPvPWarband", "Warband", 90, function() Command(".renown warband") end,
+    "Call up to four front soldiers of your side into your party. They follow and fight with you while you are on the front.")
+frontWarband:SetPoint("TOPLEFT", frontJoin, "BOTTOMLEFT", 0, -4)
+local frontDismiss = Button(panel, "RenownPvPWarbandDismiss", "Dismiss", 70, function() Command(".renown warband dismiss") end,
+    "Send your warband back to the front lines.")
+frontDismiss:SetPoint("LEFT", frontWarband, "RIGHT", 6, 0)
+local frontSession = Button(panel, "RenownPvPSession", "My session", 100, function() Command(".renown session") end,
+    "Kills, captures, Renown and levels earned since you arrived on the front.")
+frontSession:SetPoint("LEFT", frontDismiss, "RIGHT", 6, 0)
 
 -- Field mount
 local mountHeader = Label(panel, "GameFontNormal", "Field mount")
-mountHeader:SetPoint("TOPLEFT", frontJoin, "BOTTOMLEFT", 4, -14)
+mountHeader:SetPoint("TOPLEFT", frontWarband, "BOTTOMLEFT", 4, -14)
 local mountText = Label(panel, "GameFontDisableSmall", "Your racial mount at +30% speed, levels 1-39")
 mountText:SetPoint("TOPLEFT", mountHeader, "BOTTOMLEFT", 0, -3)
 local mountButton = Button(panel, "RenownPvPMount", "Mount", 70, function() RenownPvP_Mount() end,
     "Summon or dismiss your field mount. You can also bind a key (Key Bindings > Renown) or type /fm.")
-mountButton:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -14, -340)
+mountButton:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -14, -368)
 
 local function RefreshRenown()
     local s = RenownBar_State
@@ -312,7 +321,8 @@ local function RefreshFront()
         local owner = front.owners[i]
         local c = TEAM_COLOR[owner] or TEAM_COLOR[0]
         row.swatch:SetTexture(c[1], c[2], c[3])
-        row.label:SetText(OBJECTIVES[i] .. "  |cffaaaaaa" .. (TEAM_NAME[owner] or "?") .. "|r")
+        local fortified = math.mod(math.floor((front.fort or 0) / ({ 1, 2, 4 })[i]), 2) == 1
+        row.label:SetText(OBJECTIVES[i] .. "  |cffaaaaaa" .. (TEAM_NAME[owner] or "?") .. "|r" .. (fortified and "  |cffffd100fortified|r" or ""))
         if front.cap[i] > 0 and front.pct[i] > 0 then
             local cc = TEAM_COLOR[front.cap[i]]
             row.progress:SetStatusBarColor(cc[1], cc[2], cc[3])
@@ -326,6 +336,8 @@ local function RefreshFront()
         frontStatus:SetText(TEAM_NAME[front.lock] .. " victory! The front reopens in " .. math.ceil(front.lockSecs / 60) .. " min.")
     elseif front.siege > 0 then
         frontStatus:SetText("|cffff8000Siege!|r The " .. TEAM_NAME[front.siege] .. " is assaulting the enemy commander.")
+    elseif front.underdog and front.underdog > 0 then
+        frontStatus:SetText("|cffffd100The " .. TEAM_NAME[front.underdog] .. " rallies:|r +25% Renown and faster captures.")
     elseif front.inLake then
         frontStatus:SetText("|cff00ff00You are on the front.|r Hold both towers to take the Oasis.")
     else
@@ -333,6 +345,7 @@ local function RefreshFront()
     end
     local level = UnitLevel("player") or 1
     if level > 19 then frontJoin:Disable() else frontJoin:Enable() end
+    if front.inLake and level <= 19 then frontWarband:Enable() else frontWarband:Disable() end
 end
 
 local function RefreshMount()
@@ -522,10 +535,12 @@ local function UpdatePins()
 end
 
 -- ---------------------------------------------------------------- server messages
--- "owner,capTeam,pct;owner,capTeam,pct;owner,capTeam,pct/siege/lock/lockSeconds/inLake"
+-- "owner,capTeam,pct;owner,capTeam,pct;owner,capTeam,pct/siege/lock/lockSeconds/inLake[/underdog/fortifiedMask]"
 local function ParseFront(msg)
-    local _, _, objs, siege, lock, lockSecs, member = string.find(msg or "", "^(.-)/(%d)/(%d)/(%d+)/(%d)$")
+    local _, _, objs, siege, lock, lockSecs, member, rest = string.find(msg or "", "^(.-)/(%d)/(%d)/(%d+)/(%d)(.*)$")
     if not objs then return end
+    local _, _, underdog, fort = string.find(rest or "", "^/(%d)/(%d+)")
+    front.underdog, front.fort = tonumber(underdog or 0), tonumber(fort or 0)
     local i = 0
     for owner, cap, pct in string.gfind(objs, "(%d),(%d),(%d+)") do
         i = i + 1
@@ -540,6 +555,43 @@ local function ParseFront(msg)
     RefreshTracker()
     if panel:IsVisible() then RefreshFront() end
 end
+
+-- ---------------------------------------------------------------- announcer (big text for front events)
+local fx = CreateFrame("Frame", "RenownFrontFX", UIParent)
+fx:SetWidth(800)
+fx:SetHeight(60)
+fx:SetPoint("TOP", UIParent, "TOP", 0, -150)
+fx:SetFrameStrata("HIGH")
+local fxLines = {}
+for i = 1, 2 do
+    local line = fx:CreateFontString(nil, "OVERLAY", "ZoneTextFont")
+    line:SetPoint("TOP", fx, "TOP", 0, -(i - 1) * 30)
+    line:SetTextColor(1, 0.82, 0)
+    line:SetText("")
+    line.age = 99
+    fxLines[i] = line
+end
+local function ShowFX(text)
+    -- newest on top, the previous one moves down
+    fxLines[2]:SetText(fxLines[1]:GetText() or "")
+    fxLines[2].age = fxLines[1].age
+    fxLines[1]:SetText(text)
+    fxLines[1].age = 0
+    fx:Show()
+end
+fx:SetScript("OnUpdate", function()
+    for i = 1, 2 do
+        local line = fxLines[i]
+        line.age = line.age + arg1
+        if line.age > 5 then
+            line:SetAlpha(0)
+        elseif line.age > 4 then
+            line:SetAlpha(5 - line.age)
+        else
+            line:SetAlpha(1)
+        end
+    end
+end)
 
 -- ---------------------------------------------------------------- events
 local events = CreateFrame("Frame")
@@ -559,7 +611,8 @@ events:SetScript("OnEvent", function()
         end
         RenownPvP_Refresh()
     elseif event == "CHAT_MSG_ADDON" then
-        if arg1 == "RENOWNRVR" and arg4 == UnitName("player") then ParseFront(arg2) end
+        if arg1 == "RENOWNRVR" and arg4 == UnitName("player") then ParseFront(arg2)
+        elseif arg1 == "RENOWNFX" and arg4 == UnitName("player") then ShowFX(arg2) end
     elseif event == "WORLD_MAP_UPDATE" then
         UpdatePins()
     else
@@ -580,7 +633,7 @@ SlashCmdList["RENOWNPVP"] = function(msg)
     elseif msg == "" then
         RenownPvP_Toggle()
     else
-        DEFAULT_CHAT_FRAME:AddMessage("|cffffd100RenownPvP:|r /rpvp (panel) | show | hide | reset    /front [join|leave|status]    /bgq wsg|ab|av    /fm (mount)")
+        DEFAULT_CHAT_FRAME:AddMessage("|cffffd100RenownPvP:|r /rpvp (panel) | show | hide | reset    /front [join|leave|status]    /warband [dismiss]    /bgq wsg|ab|av    /fm (mount)")
     end
 end
 
@@ -603,3 +656,9 @@ end
 
 SLASH_RENOWNMOUNT1 = "/fm"
 SlashCmdList["RENOWNMOUNT"] = function() RenownPvP_Mount() end
+
+SLASH_RENOWNWARBAND1 = "/warband"
+SlashCmdList["RENOWNWARBAND"] = function(msg)
+    msg = string.lower(msg or "")
+    Command(".renown warband " .. msg)
+end

@@ -11,7 +11,7 @@ index 6c9e0e9a..63586910 100644
      availableRaces[CLASS_HUNTER].push_back(RACE_NIGHTELF);
      availableRaces[CLASS_HUNTER].push_back(RACE_ORC);
 diff --git a/playerbot/RandomPlayerbotMgr.cpp b/playerbot/RandomPlayerbotMgr.cpp
-index bf9270f0..006929ef 100644
+index bf9270f0..fed4496b 100644
 --- a/playerbot/RandomPlayerbotMgr.cpp
 +++ b/playerbot/RandomPlayerbotMgr.cpp
 @@ -1768,7 +1768,7 @@ void RandomPlayerbotMgr::CheckBgQueue()
@@ -32,7 +32,7 @@ index bf9270f0..006929ef 100644
                  BgPlayers[j][i][0],
                  BgPlayers[j][i][1],
                  BgBots[j][i][0],
-@@ -5320,4 +5320,25 @@ void RandomPlayerbotMgr::OnBotDeleted(uint32 botGuid, uint32 accountId)
+@@ -5320,4 +5320,79 @@ void RandomPlayerbotMgr::OnBotDeleted(uint32 botGuid, uint32 accountId)
              }
          }
      }
@@ -58,6 +58,60 @@ index bf9270f0..006929ef 100644
 +    }
 +
 +    ai->ResetStrategies();
++    return true;
++}
++
++// SPP Renown: warbands. A real player on the Barrens Front can call front bots into his party; they follow and fight
++// with him until he dismisses them or leaves the front.
++#include "Groups/Group.h"
++
++bool RenownBotJoinWarband(Player* bot, Player* leader)
++{
++    PlayerbotAI* ai = bot ? bot->GetPlayerbotAI() : nullptr;
++    if (!ai || !leader || !sRandomPlayerbotMgr.IsRandomBot(bot) || bot->GetGroup())
++        return false;
++
++    Group* group = leader->GetGroup();
++    if (!group)
++    {
++        group = new Group;
++        if (!group->Create(leader->GetObjectGuid(), leader->GetName()))
++        {
++            delete group;
++            return false;
++        }
++
++        sObjectMgr.AddGroup(group);
++    }
++
++    if (group->IsFull() || group->IsRaidGroup() || !group->AddMember(bot->GetObjectGuid(), bot->GetName()))
++        return false;
++
++    ai->SetMaster(leader);
++    ai->ResetStrategies();
++    ai->ChangeStrategy("+" + ai->GetDefaultMovementStrategy(), BotState::BOT_STATE_NON_COMBAT);
++    ai->ChangeStrategy("-lfg,-bg,-travel,-rpg,-tfish,-grind", BotState::BOT_STATE_NON_COMBAT);
++    ai->Reset();
++    return true;
++}
++
++bool RenownBotLeaveWarband(Player* bot)
++{
++    PlayerbotAI* ai = bot ? bot->GetPlayerbotAI() : nullptr;
++    if (!ai)
++        return false;
++
++    if (Group* group = bot->GetGroup())
++    {
++        if (group->RemoveMember(bot->GetObjectGuid(), 0) <= 1)
++        {
++            // the group fell apart (only the leader left): RemoveMember already disbanded it
++        }
++    }
++
++    ai->SetMaster(nullptr);
++    ai->ResetStrategies();
++    ai->Reset();
 +    return true;
 +}
 diff --git a/playerbot/strategy/actions/BattleGroundJoinAction.cpp b/playerbot/strategy/actions/BattleGroundJoinAction.cpp

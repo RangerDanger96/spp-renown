@@ -4,6 +4,7 @@
 #include "Module.h"
 #include "RenownModuleConfig.h"
 
+#include <array>
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -12,6 +13,8 @@
 #include "Entities/Object.h"
 
 class ChatHandler;
+class Map;
+class Creature;
 
 namespace cmangos_module
 {
@@ -116,6 +119,38 @@ namespace cmangos_module
         void RvRSpiritWave(const std::vector<Player*>& players);
         void RvRStats(ChatHandler& handler);
         bool HandleReloadCommand(WorldSession* session, const std::string& args);
+        bool HandleWarbandCommand(WorldSession* session, const std::string& args);
+        bool HandleSessionCommand(WorldSession* session, const std::string& args);
+
+        // ---- Front life (RenownFront.cpp): announcer, sessions, MVPs, underdog, protection, field orders,
+        //      supply caravans, hero bots, nemesis, town criers, warbands
+        struct FrontSession { uint32 kills = 0, deaths = 0, captures = 0, renown = 0, bestStreak = 0, startLevel = 0; time_t start = 0; };
+        struct FrontCycle { std::string name; uint32 team = 0, kills = 0, heals = 0, objectives = 0; bool real = false; };
+        struct FieldOrder { uint8 type = 0; uint8 objective = 0; time_t ends = 0; ObjectGuid bearer[2]; bool bearerDown[2] = { false, false }; float bearerPos[2][3] = {}; };
+        struct Caravan { bool active = false; ObjectGuid kodo; ObjectGuid escorts[2]; std::vector<std::array<float, 3>> path; size_t next = 0; uint8 dest = 0; float lastPos[3] = {}; time_t started = 0; };
+
+        void FrontFX(const std::string& text, uint32 team, uint32 soundAlliance, uint32 soundHorde, bool chat = true);
+        void FrontEnter(Player* player);
+        void FrontLeave(Player* player);
+        void FrontOnKill(Player* killer, Player* victim, uint32 oldStreak, uint32 newStreak);
+        void FrontOnHealAssist(Player* healer);
+        void FrontOnCapture(size_t index, uint32 team, uint32 previous, const std::vector<Player*>& capturers);
+        void FrontOnAssault(size_t index, uint32 attacker);
+        void FrontOnSiege(uint32 team);
+        void FrontOnVictory(uint32 team);
+        void FrontOnRenown(Player* player, uint32 gained);
+        void FrontProtect(Player* player);
+        void FrontUpdate(uint32 diff, const std::vector<Player*>& players, const std::vector<Player*>& members);
+        float FrontCaptureRate(size_t index, uint32 team) const;
+        uint32 FrontRenownBonus(Player* player, uint32 gained) const;
+        bool FrontIsWarbandBot(uint32 botId) const;
+        void FrontDismissWarband(uint32 leaderId, Player* leader, bool announce);
+        void FrontSessionSummary(Player* player, bool final);
+        void FrontUpdateOrders(const std::vector<Player*>& members);
+        void FrontUpdateCaravans(const std::vector<Player*>& members);
+        void FrontUpdateHeroes(const std::vector<Player*>& members);
+        void FrontCrier();
+        Map* FrontMap(const std::vector<Player*>& members) const;
 
         void LoadVendorCosts();
 
@@ -147,6 +182,7 @@ namespace cmangos_module
             uint32 owner = 0;         // 0 = neutral, else ALLIANCE / HORDE
             uint32 capTeam = 0;
             uint32 progress = 0;      // ms of uncontested capture
+            time_t fortifiedUntil = 0; // supply caravan delivered: enemy captures at half speed
         };
 
         void RvRInit();
@@ -207,6 +243,21 @@ namespace cmangos_module
         uint32 m_rvrSpiritTimer = 0;
         std::unordered_map<uint32, time_t> m_rvrHintTime;   // last "center is locked" hint per player
         uint32 m_rvrHoldTeam = 0;
+        // front life
+        std::mutex m_frontMutex;                                       // guards the maps below (deaths come from map threads)
+        std::unordered_map<uint32, FrontSession> m_frontSessions;      // real players on the front
+        std::unordered_map<uint32, FrontCycle> m_frontCycle;           // per front cycle, for MVPs
+        std::unordered_map<uint64, uint32> m_frontKillCount;           // (victim << 32 | killer) -> kills
+        std::unordered_map<uint32, uint32> m_frontNemesis;             // victim -> nemesis
+        std::unordered_map<uint32, uint8> m_frontHeroes;               // hero bot -> side (0 alliance, 1 horde)
+        std::unordered_map<uint32, std::vector<uint32>> m_frontWarbands; // leader -> bots
+        std::unordered_map<uint32, time_t> m_frontProtect;             // spawn protection until
+        bool m_frontFirstBlood = false;
+        uint32 m_frontUnderdog = 0;
+        uint32 m_frontTimer = 0;
+        time_t m_frontNextOrder = 0, m_frontNextCaravan[2] = { 0, 0 }, m_frontNextCrier = 0, m_frontHeroCheck = 0;
+        FieldOrder m_frontOrder;
+        Caravan m_frontCaravans[2];
         uint32 m_rvrHoldTime = 0;
         uint32 m_rvrSiegeTeam = 0;                       // attacking team during a siege
         uint32 m_rvrLockTeam = 0;

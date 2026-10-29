@@ -278,3 +278,25 @@ G.append("INSERT INTO game_graveyard_zone (id,ghost_loc,link_kind,faction) VALUE
 G.append("DELETE FROM creature WHERE guid=9100340;")
 G.append("INSERT INTO creature (guid,id,map,spawnMask,position_x,position_y,position_z,orientation,spawntimesecsmin,spawntimesecsmax,spawndist,MovementType) VALUES (9100340,6491,1,1,-2093.0,-3639.0,62.0,1.0,60,60,0,0);")
 with open('/root/rvr/zz_rvr.sql','a',newline='\r\n') as f: f.write("\n".join(G)+"\n")
+
+# ------------------------------------------------------------------ front life NPCs (summoned by the Renown module)
+F=[]
+F.append("")
+F.append("-- ============================================================")
+F.append("-- Barrens Front life: supply caravans (190840 kodo, 190841 mule) and standard-bearers (190842 Horde, 190843 Alliance)")
+F.append("-- ============================================================")
+F.append("DELETE FROM creature_template WHERE Entry BETWEEN 190840 AND 190843;")
+def fclone(src,entry,name,sub,lvl,rank,hp,dmin,dmax,armor,faction):
+    F.append("DROP TEMPORARY TABLE IF EXISTS tmp_ct;")
+    F.append(f"CREATE TEMPORARY TABLE tmp_ct SELECT * FROM creature_template WHERE Entry={src};")
+    F.append(f"UPDATE tmp_ct SET Entry={entry}, Name='{name}', SubName='{sub}', MinLevel={lvl}, MaxLevel={lvl}, `Rank`={rank}, Faction={faction}, "
+      f"MinLevelHealth={hp}, MaxLevelHealth={hp}, MinMeleeDmg={dmin}, MaxMeleeDmg={dmax}, Armor={armor}, NpcFlags=0, GossipMenuId=0, UnitFlags=0, "
+      "AIName='', ScriptName='', LootId=0, PickpocketLootId=0, SkinningLootId=0, MinLootGold=0, MaxLootGold=0, KillCredit1=0, KillCredit2=0, "
+      "MovementType=0, Civilian=0, VendorTemplateId=0, TrainerTemplateId=0, TrainerType=0, ExperienceMultiplier=0;")
+    F.append("INSERT INTO creature_template SELECT * FROM tmp_ct;")
+fclone(10636,190840,'Crossroads Supply Kodo','Barrens Front',20,1,3500,10,15,900,85)
+fclone(16225,190841,'Northwatch Supply Mule','Barrens Front',20,1,3500,10,15,900,1077)
+fclone(3501,190842,'Horde Standard-Bearer','Barrens Front',21,1,2500,45,60,950,85)
+fclone(3385,190843,'Alliance Standard-Bearer','Barrens Front',21,1,2500,45,60,950,1077)
+F.append("DROP TEMPORARY TABLE IF EXISTS tmp_ct;")
+with open('/root/rvr/zz_rvr.sql','a',newline='\r\n') as f: f.write("\n".join(F)+"\n")

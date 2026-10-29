@@ -233,3 +233,25 @@ DELETE FROM game_graveyard_zone WHERE id=1900 OR (id=249 AND ghost_loc IN (17,39
 INSERT INTO game_graveyard_zone (id,ghost_loc,link_kind,faction) VALUES (1900,17,0,469),(249,392,0,0);
 DELETE FROM creature WHERE guid=9100340;
 INSERT INTO creature (guid,id,map,spawnMask,position_x,position_y,position_z,orientation,spawntimesecsmin,spawntimesecsmax,spawndist,MovementType) VALUES (9100340,6491,1,1,-2093.0,-3639.0,62.0,1.0,60,60,0,0);
+
+-- ============================================================
+-- Barrens Front life: supply caravans (190840 kodo, 190841 mule) and standard-bearers (190842 Horde, 190843 Alliance)
+-- ============================================================
+DELETE FROM creature_template WHERE Entry BETWEEN 190840 AND 190843;
+DROP TEMPORARY TABLE IF EXISTS tmp_ct;
+CREATE TEMPORARY TABLE tmp_ct SELECT * FROM creature_template WHERE Entry=10636;
+UPDATE tmp_ct SET Entry=190840, Name='Crossroads Supply Kodo', SubName='Barrens Front', MinLevel=20, MaxLevel=20, `Rank`=1, Faction=85, MinLevelHealth=3500, MaxLevelHealth=3500, MinMeleeDmg=10, MaxMeleeDmg=15, Armor=900, NpcFlags=0, GossipMenuId=0, UnitFlags=0, AIName='', ScriptName='', LootId=0, PickpocketLootId=0, SkinningLootId=0, MinLootGold=0, MaxLootGold=0, KillCredit1=0, KillCredit2=0, MovementType=0, Civilian=0, VendorTemplateId=0, TrainerTemplateId=0, TrainerType=0, ExperienceMultiplier=0;
+INSERT INTO creature_template SELECT * FROM tmp_ct;
+DROP TEMPORARY TABLE IF EXISTS tmp_ct;
+CREATE TEMPORARY TABLE tmp_ct SELECT * FROM creature_template WHERE Entry=16225;
+UPDATE tmp_ct SET Entry=190841, Name='Northwatch Supply Mule', SubName='Barrens Front', MinLevel=20, MaxLevel=20, `Rank`=1, Faction=1077, MinLevelHealth=3500, MaxLevelHealth=3500, MinMeleeDmg=10, MaxMeleeDmg=15, Armor=900, NpcFlags=0, GossipMenuId=0, UnitFlags=0, AIName='', ScriptName='', LootId=0, PickpocketLootId=0, SkinningLootId=0, MinLootGold=0, MaxLootGold=0, KillCredit1=0, KillCredit2=0, MovementType=0, Civilian=0, VendorTemplateId=0, TrainerTemplateId=0, TrainerType=0, ExperienceMultiplier=0;
+INSERT INTO creature_template SELECT * FROM tmp_ct;
+DROP TEMPORARY TABLE IF EXISTS tmp_ct;
+CREATE TEMPORARY TABLE tmp_ct SELECT * FROM creature_template WHERE Entry=3501;
+UPDATE tmp_ct SET Entry=190842, Name='Horde Standard-Bearer', SubName='Barrens Front', MinLevel=21, MaxLevel=21, `Rank`=1, Faction=85, MinLevelHealth=2500, MaxLevelHealth=2500, MinMeleeDmg=45, MaxMeleeDmg=60, Armor=950, NpcFlags=0, GossipMenuId=0, UnitFlags=0, AIName='', ScriptName='', LootId=0, PickpocketLootId=0, SkinningLootId=0, MinLootGold=0, MaxLootGold=0, KillCredit1=0, KillCredit2=0, MovementType=0, Civilian=0, VendorTemplateId=0, TrainerTemplateId=0, TrainerType=0, ExperienceMultiplier=0;
+INSERT INTO creature_template SELECT * FROM tmp_ct;
+DROP TEMPORARY TABLE IF EXISTS tmp_ct;
+CREATE TEMPORARY TABLE tmp_ct SELECT * FROM creature_template WHERE Entry=3385;
+UPDATE tmp_ct SET Entry=190843, Name='Alliance Standard-Bearer', SubName='Barrens Front', MinLevel=21, MaxLevel=21, `Rank`=1, Faction=1077, MinLevelHealth=2500, MaxLevelHealth=2500, MinMeleeDmg=45, MaxMeleeDmg=60, Armor=950, NpcFlags=0, GossipMenuId=0, UnitFlags=0, AIName='', ScriptName='', LootId=0, PickpocketLootId=0, SkinningLootId=0, MinLootGold=0, MaxLootGold=0, KillCredit1=0, KillCredit2=0, MovementType=0, Civilian=0, VendorTemplateId=0, TrainerTemplateId=0, TrainerType=0, ExperienceMultiplier=0;
+INSERT INTO creature_template SELECT * FROM tmp_ct;
+DROP TEMPORARY TABLE IF EXISTS tmp_ct;

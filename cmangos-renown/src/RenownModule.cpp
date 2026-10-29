@@ -933,6 +933,7 @@ namespace cmangos_module
         }
 
         const RenownModuleConfig* config = GetConfig();
+        uint32 newStreak = 0;
         if (config->streaks)
         {
             // Bounty for ending a streak
@@ -951,6 +952,7 @@ namespace cmangos_module
                 std::lock_guard<std::mutex> lock(m_dataMutex);
                 streak = ++m_data[player->GetObjectGuid().GetCounter()].streak;
             }
+            newStreak = streak;
 
             if (streak >= 3)
             {
@@ -979,6 +981,9 @@ namespace cmangos_module
                 }
             }
         }
+
+        // Announcer, nemesis, heroes, sessions, MVP tally
+        FrontOnKill(player, victim, oldStreak, newStreak);
 
         // War board credits for kills on the front
         if (RvRIsMember(player->GetObjectGuid().GetCounter()))
@@ -1067,6 +1072,7 @@ namespace cmangos_module
                     }
 
                     AddRenown(healer, config->pointsHealAssist);
+                    FrontOnHealAssist(healer);
                 }
             }
         }
@@ -1120,6 +1126,7 @@ namespace cmangos_module
         if (applyRate)
         {
             gained = (uint32)(basePoints * GetConfig()->rate + 0.5f);
+            gained = FrontRenownBonus(player, gained);
         }
 
         if (gained == 0)
@@ -1150,6 +1157,8 @@ namespace cmangos_module
             newRank = GetConfig()->GetRankForPoints(data.points);
             data.rank = newRank;
         }
+
+        FrontOnRenown(player, gained);
 
         if (newRank != oldRank)
         {
@@ -1368,6 +1377,8 @@ namespace cmangos_module
             { "queue", std::bind(&RenownModule::HandleQueueCommand, this, std::placeholders::_1, std::placeholders::_2), SEC_PLAYER },
             { "rvr", std::bind(&RenownModule::HandleRvRCommand, this, std::placeholders::_1, std::placeholders::_2), SEC_PLAYER },
             { "mount", std::bind(&RenownModule::HandleMountCommand, this, std::placeholders::_1, std::placeholders::_2), SEC_PLAYER },
+            { "warband", std::bind(&RenownModule::HandleWarbandCommand, this, std::placeholders::_1, std::placeholders::_2), SEC_PLAYER },
+            { "session", std::bind(&RenownModule::HandleSessionCommand, this, std::placeholders::_1, std::placeholders::_2), SEC_PLAYER },
             { "reload", std::bind(&RenownModule::HandleReloadCommand, this, std::placeholders::_1, std::placeholders::_2), SEC_ADMINISTRATOR }
         };
 
