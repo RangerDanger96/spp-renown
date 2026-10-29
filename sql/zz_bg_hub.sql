@@ -385,9 +385,10 @@ INSERT INTO creature (guid,id,map,spawnMask,position_x,position_y,position_z,ori
 (9100334,190833,1,1,-2914.059,-251.358,52.999,4.2237,25,25,0,0), -- Camp Narache
 (9100335,190833,0,1,1658.120,1663.491,141.126,5.8200,25,25,0,0); -- Deathknell
 
--- Renown Armorers (levels 40-60 Renown stock; the quartermaster keeps 1-39)
+-- Renown Armorers (levels 40-60 stock) and Warmasters (level 60 tiers 7-9) beside each quartermaster
 DELETE FROM creature_template WHERE Entry IN (190108,190109);
 DELETE FROM creature WHERE guid BETWEEN 9100350 AND 9100359;
+DELETE FROM creature_template WHERE Entry IN (190110,190111);
 DROP TEMPORARY TABLE IF EXISTS tmp_ct;
 CREATE TEMPORARY TABLE tmp_ct SELECT * FROM creature_template WHERE Entry=190100;
 UPDATE tmp_ct SET Entry=190108, Name='Armorer Stonebrand', SubName='Renown Armorer (40-60)', DisplayId1=3054, NpcFlags=4, TrainerType=0, GossipMenuId=0, Faction=35;
@@ -397,10 +398,24 @@ CREATE TEMPORARY TABLE tmp_ct SELECT * FROM creature_template WHERE Entry=190100
 UPDATE tmp_ct SET Entry=190109, Name='Armorer Gorgash', SubName='Renown Armorer (40-60)', DisplayId1=4259, NpcFlags=4, TrainerType=0, GossipMenuId=0, Faction=35;
 INSERT INTO creature_template SELECT * FROM tmp_ct;
 DROP TEMPORARY TABLE IF EXISTS tmp_ct;
+CREATE TEMPORARY TABLE tmp_ct SELECT * FROM creature_template WHERE Entry=190100;
+UPDATE tmp_ct SET Entry=190110, Name='Warmaster Highcrest', SubName='Renown Warmaster (60)', DisplayId1=3167, NpcFlags=4, TrainerType=0, GossipMenuId=0, Faction=35;
+INSERT INTO creature_template SELECT * FROM tmp_ct;
+DROP TEMPORARY TABLE IF EXISTS tmp_ct;
+CREATE TEMPORARY TABLE tmp_ct SELECT * FROM creature_template WHERE Entry=190100;
+UPDATE tmp_ct SET Entry=190111, Name='Warmaster Skullsplit', SubName='Renown Warmaster (60)', DisplayId1=14360, NpcFlags=4, TrainerType=0, GossipMenuId=0, Faction=35;
+INSERT INTO creature_template SELECT * FROM tmp_ct;
+DROP TEMPORARY TABLE IF EXISTS tmp_ct;
 INSERT INTO creature (guid,id,map,spawnMask,position_x,position_y,position_z,orientation,spawntimesecsmin,spawntimesecsmax,spawndist,MovementType) VALUES
 (9100350,190108,0,1,-8941.825,-134.069,83.767,2.5133,25,25,0,0), -- Northshire Valley armorer
-(9100351,190108,0,1,-6232.408,328.605,382.945,2.4072,25,25,0,0), -- Coldridge Valley armorer
-(9100352,190108,1,1,10315.810,824.523,1326.432,1.7104,25,25,0,0), -- Shadowglen armorer
-(9100353,190109,1,1,-610.393,-4253.246,39.006,2.5133,25,25,0,0), -- Valley of Trials armorer
-(9100354,190109,1,1,-2909.455,-259.556,53.023,2.5133,25,25,0,0), -- Camp Narache armorer
-(9100355,190109,0,1,1666.199,1668.303,141.270,4.1095,25,25,0,0); -- Deathknell armorer
+(9100351,190110,0,1,-8945.939,-139.733,83.662,2.5133,25,25,0,0), -- Northshire Valley warmaster
+(9100352,190108,0,1,-6232.408,328.605,382.945,2.4072,25,25,0,0), -- Coldridge Valley armorer
+(9100353,190110,0,1,-6237.098,323.409,382.663,2.4072,25,25,0,0), -- Coldridge Valley warmaster
+(9100354,190108,1,1,10315.810,824.523,1326.432,1.7104,25,25,0,0), -- Shadowglen armorer
+(9100355,190110,1,1,10308.878,823.549,1326.561,1.7104,25,25,0,0), -- Shadowglen warmaster
+(9100356,190109,1,1,-610.393,-4253.246,39.006,2.5133,25,25,0,0), -- Valley of Trials armorer
+(9100357,190111,1,1,-614.507,-4258.910,39.006,2.5133,25,25,0,0), -- Valley of Trials warmaster
+(9100358,190109,1,1,-2909.455,-259.556,53.023,2.5133,25,25,0,0), -- Camp Narache armorer
+(9100359,190111,1,1,-2913.569,-265.220,53.612,2.5133,25,25,0,0), -- Camp Narache warmaster
+(9100360,190109,0,1,1666.199,1668.303,141.270,4.1095,25,25,0,0), -- Deathknell armorer
+(9100361,190111,0,1,1671.965,1664.333,139.522,4.1095,25,25,0,0); -- Deathknell warmaster

@@ -166,13 +166,15 @@ for i,r in enumerate(crs):
 # ---- Renown Armorer beside each quartermaster: a vendor holds at most 255 items, so the level 40-60 Renown
 #      stock lives on a second NPC (entries 190108 Alliance / 190109 Horde, spawns 9100350-9100355)
 w("")
-w("-- Renown Armorers (levels 40-60 Renown stock; the quartermaster keeps 1-39)")
+w("-- Renown Armorers (levels 40-60 stock) and Warmasters (level 60 tiers 7-9) beside each quartermaster")
 w("DELETE FROM creature_template WHERE Entry IN (190108,190109);")
 w("DELETE FROM creature WHERE guid BETWEEN 9100350 AND 9100359;")
-for e,name,disp in [(190108,'Armorer Stonebrand',3054),(190109,'Armorer Gorgash',4259)]:
+w("DELETE FROM creature_template WHERE Entry IN (190110,190111);")
+for e,name,disp,sub in [(190108,'Armorer Stonebrand',3054,'Renown Armorer (40-60)'),(190109,'Armorer Gorgash',4259,'Renown Armorer (40-60)'),
+                        (190110,'Warmaster Highcrest',3167,'Renown Warmaster (60)'),(190111,'Warmaster Skullsplit',14360,'Renown Warmaster (60)')]:
     w("DROP TEMPORARY TABLE IF EXISTS tmp_ct;")
     w(f"CREATE TEMPORARY TABLE tmp_ct SELECT * FROM creature_template WHERE Entry={QM_A};")
-    w(f"UPDATE tmp_ct SET Entry={e}, Name='{name}', SubName='Renown Armorer (40-60)', DisplayId1={disp}, NpcFlags=4, TrainerType=0, GossipMenuId=0, Faction=35;")
+    w(f"UPDATE tmp_ct SET Entry={e}, Name='{name}', SubName='{sub}', DisplayId1={disp}, NpcFlags=4, TrainerType=0, GossipMenuId=0, Faction=35;")
     w("INSERT INTO creature_template SELECT * FROM tmp_ct;")
 w("DROP TEMPORARY TABLE IF EXISTS tmp_ct;")
 arm=[]
@@ -183,6 +185,9 @@ for r in layout:
     a=float(r['o'])-_m.pi/2; d=3.5
     x=float(r['x'])+d*_m.cos(a); y=float(r['y'])+d*_m.sin(a); z=_height(g,x,y)
     arm.append(f"({9100350+len(arm)},{190108 if r['side']=='A' else 190109},{r['map']},1,{x:.3f},{y:.3f},{z+0.05:.3f},{float(r['o']):.4f},25,25,0,0) -- {r['area']} armorer")
+    a=float(r['o'])+_m.pi/2
+    x=float(r['x'])+d*_m.cos(a); y=float(r['y'])+d*_m.sin(a); z=_height(g,x,y)
+    arm.append(f"({9100350+len(arm)},{190110 if r['side']=='A' else 190111},{r['map']},1,{x:.3f},{y:.3f},{z+0.05:.3f},{float(r['o']):.4f},25,25,0,0) -- {r['area']} warmaster")
 w("INSERT INTO creature (guid,id,map,spawnMask,position_x,position_y,position_z,orientation,spawntimesecsmin,spawntimesecsmax,spawndist,MovementType) VALUES")
 for i,r in enumerate(arm):
     body,c=r.split(' -- '); w(body+(";" if i==len(arm)-1 else ",")+" -- "+c)
