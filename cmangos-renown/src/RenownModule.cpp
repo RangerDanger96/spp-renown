@@ -35,6 +35,8 @@ namespace cmangos_module
 
     void RenownModule::OnInitialize()
     {
+        TalentsInit();
+
         if (!GetConfig()->enabled)
         {
             return;
@@ -143,6 +145,8 @@ namespace cmangos_module
         {
             return;
         }
+
+        TalentsOnLogout(player);
 
         // Make sure the latest value is written before the cache entry goes away
         OnSaveToDB(player);
@@ -1042,6 +1046,9 @@ namespace cmangos_module
 
     void RenownModule::OnDealDamage(Unit* unit, Unit* victim, uint32 health, uint32 damage)
     {
+        if (victim && damage)
+            TalentsOnDealDamage(unit, victim, damage);
+
         if (!unit || !victim || damage == 0 || victim->GetTypeId() != TYPEID_PLAYER || !GetConfig()->enabled)
         {
             return;

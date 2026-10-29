@@ -59,6 +59,16 @@ namespace cmangos_module
         void OnDealDamage(Unit* unit, Unit* victim, uint32 health, uint32 damage) override;
         void OnDealHeal(Unit* unit, Unit* victim, int32 gain, uint32 addHealth) override;
 
+        // WoW Forever warrior talents (RenownTalents.cpp)
+        void OnRegenerate(Player* player, uint8 power, uint32 diff, float& addedValue) override;
+        bool OnCalculateEffectiveCritChance(const Unit* unit, const Unit* victim, uint8 attType, const SpellEntry* ability, float& outChance) override;
+        bool OnCalculateEffectiveMissChance(const Unit* unit, const Unit* victim, uint8 attType, const SpellEntry* ability, const Spell* const* currentSpells, const SpellPartialResistDistribution& spellPartialResistDistribution, float& outChance) override;
+        void OnHit(Spell* spell, Unit* caster, Unit* victim) override;
+        void OnCast(Spell* spell, Unit* caster, Unit* victim) override;
+        void TalentsInit();
+        void TalentsOnDealDamage(Unit* dealer, Unit* victim, uint32 damage);
+        void TalentsOnLogout(Player* player);
+
         // Gossip hooks
         bool OnPreGossipHello(Player* player, Creature* creature) override;
 
