@@ -67,6 +67,7 @@ namespace cmangos_module
 
         LoadVendorCosts();
         LoadDungeonLoot();
+        InfluenceInit();
         RvRInit();
         QuestsInit();
 
@@ -94,6 +95,7 @@ namespace cmangos_module
         data.rank = GetConfig()->GetRankForPoints(data.points);
 
         QuestsLoad(player);
+        InfluenceLoad(player);
 
         std::lock_guard<std::mutex> lock(m_dataMutex);
         m_data[playerId] = data;
@@ -129,6 +131,8 @@ namespace cmangos_module
         {
             QuestsSave(player);
         }
+
+        InfluenceSave(player);
     }
 
     void RenownModule::SaveData(uint32 playerId, const RenownData& data)
@@ -152,6 +156,8 @@ namespace cmangos_module
         }
 
         TalentsOnLogout(player);
+        InfluenceSave(player);
+        InfluenceForget(player->GetObjectGuid().GetCounter());
 
         // Make sure the latest value is written before the cache entry goes away
         OnSaveToDB(player);
@@ -1340,6 +1346,7 @@ namespace cmangos_module
                 if (o.owner == player->GetTeam() && dx * dx + dy * dy <= 40.0f * 40.0f)
                 {
                     AddRenown(player, config->rvrDefendPoints);
+                    InfluenceAdd(player, 5);
                     QuestCredit(player, 190821);   // war board: defend
                     break;
                 }
@@ -1410,6 +1417,29 @@ namespace cmangos_module
 
         // Loot bags for enemy player kills on the fronts and in the open world
         RollKillBags(player, victim, contributors);
+
+        // Barrens Front influence for everyone who helped with a kill on the front
+        if (victim->GetMapId() == 1 && victim->GetZoneId() == 17 && victim->GetLevel() <= config->rvrMaxLevel)
+        {
+            for (uint32 id : contributors)
+            {
+                Player* helper = id == player->GetObjectGuid().GetCounter() ? player : sObjectMgr.GetPlayer(ObjectGuid(HIGHGUID_PLAYER, id));
+                if (helper && helper->IsInWorld() && helper->GetMap() == player->GetMap() && helper->GetTeam() != victim->GetTeam())
+                {
+                    InfluenceAdd(helper, 10);
+                }
+            }
+        }
+    }
+
+    bool RenownModule::OnGossipSelect(Player* player, Creature* creature, uint32 /*sender*/, uint32 action, const std::string& /*code*/, uint32 /*gossipListId*/)
+    {
+        if (!player || !creature || !GetConfig()->enabled)
+        {
+            return false;
+        }
+
+        return InfluenceGossipSelect(player, creature, action);
     }
 
     bool RenownModule::OnPreGossipHello(Player* player, Creature* creature)
@@ -1417,6 +1447,12 @@ namespace cmangos_module
         if (!player || !creature || !GetConfig()->enabled)
         {
             return false;
+        }
+
+        if (InfluenceIsRallyMaster(creature))
+        {
+            InfluenceShowMenu(player, creature);
+            return true;
         }
 
         const std::vector<uint32>& npcs = GetConfig()->quartermasters;

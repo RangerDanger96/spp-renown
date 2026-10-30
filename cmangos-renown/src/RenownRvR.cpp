@@ -250,6 +250,16 @@ namespace cmangos_module
 
         RvRAwardBags(team);
         FrontOnVictory(team);
+
+        // Influence for everyone on the front: winners 150, losers 50
+        for (uint32 id : m_rvrMembers)
+        {
+            Player* member = sObjectMgr.GetPlayer(ObjectGuid(HIGHGUID_PLAYER, id));
+            if (RenownPlayerOk(member) && member->isRealPlayer())
+            {
+                InfluenceAdd(member, member->GetTeam() == team ? 150 : 50);
+            }
+        }
         m_rvrDirty = true;
     }
 
@@ -491,6 +501,7 @@ namespace cmangos_module
     {
         const uint32 playerId = player->GetObjectGuid().GetCounter();
         m_rvrMembers.insert(playerId);
+        InfluenceSendStatus(player);
 
         const uint32 cap = GetConfig()->rvrMaxLevel;
         if (player->GetLevel() > cap && !player->IsGameMaster())
@@ -1305,6 +1316,7 @@ namespace cmangos_module
                         for (Player* player : nearby[team == ALLIANCE ? 0 : 1])
                         {
                             AddRenown(player, config->rvrCapturePoints);
+                            InfluenceAdd(player, 60);
                             QuestCredit(player, 190820);   // war board: capture
                         }
                     }
@@ -1378,6 +1390,10 @@ namespace cmangos_module
                     if (owned && config->rvrTickPoints)
                     {
                         AddRenown(player, config->rvrTickPoints * owned);
+                    }
+                    if (owned && RvRIsMember(player->GetObjectGuid().GetCounter()))
+                    {
+                        InfluenceAdd(player, 2 * owned);
                     }
                 }
             }

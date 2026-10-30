@@ -553,7 +553,7 @@ end)
 local HUD_W = 330
 local tracker = CreateFrame("Frame", "RenownFrontHUD", UIParent)
 tracker:SetWidth(HUD_W)
-tracker:SetHeight(104)
+tracker:SetHeight(124)
 tracker:SetFrameStrata("MEDIUM")
 tracker:SetMovable(true)
 tracker:EnableMouse(true)
@@ -640,7 +640,50 @@ for i = 1, 3 do
 end
 
 local hudState = tracker:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-hudState:SetPoint("BOTTOM", tracker, "BOTTOM", 0, 7)
+hudState:SetPoint("BOTTOM", tracker, "BOTTOM", 0, 25)
+
+-- influence bar (Warhammer style): fills from front activity, three reward tiers at the Rally Master
+local influence = { points = 0, claimed = 0, tiers = { 300, 900, 1800 } }
+local infBar = CreateFrame("StatusBar", nil, tracker)
+infBar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
+infBar:SetStatusBarColor(0.85, 0.65, 0.2)
+infBar:SetWidth(DOM_W)
+infBar:SetHeight(9)
+infBar:SetPoint("BOTTOM", tracker, "BOTTOM", 0, 9)
+infBar:SetMinMaxValues(0, 1800)
+local infBg = infBar:CreateTexture(nil, "BACKGROUND")
+infBg:SetAllPoints(infBar)
+infBg:SetTexture(0.08, 0.06, 0.02, 0.9)
+local infTicks = {}
+for t = 1, 2 do
+    local tick = infBar:CreateTexture(nil, "OVERLAY")
+    tick:SetTexture(1, 1, 1, 0.7)
+    tick:SetWidth(1)
+    tick:SetHeight(11)
+    infTicks[t] = tick
+end
+local infText = infBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+infText:SetPoint("CENTER", infBar, "CENTER", 0, 0)
+local function RefreshInfluence()
+    local top = influence.tiers[3]
+    infBar:SetMinMaxValues(0, top)
+    infBar:SetValue(influence.points)
+    for t = 1, 2 do
+        infTicks[t]:ClearAllPoints()
+        infTicks[t]:SetPoint("CENTER", infBar, "LEFT", DOM_W * influence.tiers[t] / top, 0)
+    end
+    local unclaimed = 0
+    for t = 1, 3 do
+        if influence.points >= influence.tiers[t] and math.mod(math.floor(influence.claimed / math.pow(2, t - 1)), 2) == 0 then
+            unclaimed = unclaimed + 1
+        end
+    end
+    local text = "Influence " .. influence.points .. " / " .. top
+    if unclaimed > 0 then
+        text = text .. "  |cff00ff00(reward ready at the Rally Master)|r"
+    end
+    infText:SetText(text)
+end
 
 -- personal capture bar (middle of the screen while you stand on an objective)
 local capFrame = CreateFrame("Frame", "RenownCaptureBar", UIParent)
@@ -868,6 +911,14 @@ end
 
 -- ---------------------------------------------------------------- server messages
 -- "owner,capTeam,pct;owner,capTeam,pct;owner,capTeam,pct/siege/lock/lockSeconds/inLake[/underdog/fortifiedMask/domination/nearObjective]"
+local function ParseInfluence(msg)
+    local _, _, pts, claimed, t1, t2, t3 = string.find(msg or "", "^(%d+)/(%d+)/(%d+)/(%d+)/(%d+)")
+    if not pts then return end
+    influence.points, influence.claimed = tonumber(pts), tonumber(claimed)
+    influence.tiers = { tonumber(t1), tonumber(t2), tonumber(t3) }
+    RefreshInfluence()
+end
+
 local function ParseFront(msg)
     local _, _, objs, siege, lock, lockSecs, member, rest = string.find(msg or "", "^(.-)/(%d)/(%d)/(%d+)/(%d)(.*)$")
     if not objs then return end
@@ -946,6 +997,7 @@ events:SetScript("OnEvent", function()
         RenownPvP_Refresh()
     elseif event == "CHAT_MSG_ADDON" then
         if arg1 == "RENOWNRVR" and arg4 == UnitName("player") then ParseFront(arg2)
+        elseif arg1 == "RENOWNINF" and arg4 == UnitName("player") then ParseInfluence(arg2)
         elseif arg1 == "RENOWNFX" and arg4 == UnitName("player") then ShowFX(arg2) end
     elseif event == "WORLD_MAP_UPDATE" then
         UpdatePins()

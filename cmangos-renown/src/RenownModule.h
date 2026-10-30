@@ -74,6 +74,21 @@ namespace cmangos_module
         void TalentsOnDealDamage(Unit* dealer, Unit* victim, uint32 damage);
         void TalentsOnLogout(Player* player);
 
+        // Barrens Front influence (RenownInfluence.cpp)
+        bool OnGossipSelect(Player* player, Creature* creature, uint32 sender, uint32 action, const std::string& code, uint32 gossipListId) override;
+        struct InfluenceData { uint32 points = 0; uint8 claimed = 0; bool dirty = false; };
+        std::mutex m_influenceMutex;
+        std::unordered_map<uint32, InfluenceData> m_influence;
+        void InfluenceInit();
+        void InfluenceLoad(Player* player);
+        void InfluenceSave(Player* player);
+        void InfluenceForget(uint32 playerId);
+        void InfluenceAdd(Player* player, uint32 amount);
+        void InfluenceSendStatus(Player* player);
+        bool InfluenceIsRallyMaster(const Creature* creature) const;
+        void InfluenceShowMenu(Player* player, Creature* creature);
+        bool InfluenceGossipSelect(Player* player, Creature* creature, uint32 action);
+
         // Gossip hooks
         bool OnPreGossipHello(Player* player, Creature* creature) override;
 
