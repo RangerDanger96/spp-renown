@@ -101,7 +101,8 @@ jobs:
             -DFETCHCONTENT_SOURCE_DIR_HARDCORE="$W/core/src/modules/hardcore" \
             -DFETCHCONTENT_SOURCE_DIR_TRANSMOG="$W/core/src/modules/transmog" \
             -DFETCHCONTENT_SOURCE_DIR_RENOWN="$W/core/src/modules/renown" \
-            -B "$W/build" -S "$W/core"
+            -B "$W/build" -S "$W/core" 2>&1 | tee cfg.log
+          test ${PIPESTATUS[0]} -eq 0
 
       - name: Build
         shell: bash
@@ -113,6 +114,8 @@ jobs:
         if: failure()
         shell: bash
         run: |
+          [ -f cfg.log ] && grep -A4 "CMake Error" cfg.log | head -40 | while IFS= read -r line; do echo "::error::$line"; done
+          [ -f build.log ] || exit 0
           grep -E "error C[0-9]+|error LNK|fatal error" build.log | sort -u | head -40 | while IFS= read -r line; do echo "::error::$line"; done
 
       - name: Package
