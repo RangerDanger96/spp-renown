@@ -366,7 +366,7 @@ tal.rows = sorted(new_rows, key=lambda r: r[0])
 
 # Spearing Strike in the Arms spellbook tab (copy Mortal Strike's SkillLineAbility row)
 ms = next(r for r in sla.rows if r[2] == 12294)
-row = list(ms); row[0] = max(r[0] for r in sla.rows) + 1; row[2] = N['spear']
+row = list(ms); row[0] = max(r[0] for r in sla.rows) + 1; row[2] = N['spear']; row[8] = 0  # no next rank
 sla.rows.append(row)
 
 # ================================================================ SQL extras
