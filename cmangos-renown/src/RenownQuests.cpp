@@ -26,7 +26,7 @@ namespace cmangos_module
 {
     namespace
     {
-        const uint16 QUEST_EVENT_BASE = 1120;   // + daily quest index 0-7
+        const uint16 QUEST_EVENT_BASE = 1120 + RENOWN_EVENT_OFFSET;   // + daily quest index 0-7
         const uint32 QUEST_COUNT = 8;
         const uint32 HORDE_DAILY_BASE = 90101;  // 90101-90108, weekly 90109
         const uint32 ALLIANCE_DAILY_BASE = 90111; // 90111-90118, weekly 90119

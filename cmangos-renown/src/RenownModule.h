@@ -17,11 +17,13 @@
 #if EXPANSION == 0
 #define RENOWN_CAN_USE(player, proto) (player)->CanUseItem(proto, false)
 #define RENOWN_PLAY_TARGET PlayPacketSettings::TARGET
+#define RENOWN_EVENT_OFFSET 0     // game_event ids 1100-1132
 #define RENOWN_TALENTS 1          // WoW Forever warrior talents (classic only)
 #define RENOWN_MANUAL_DAILIES 1   // classic has no native daily quests (core patch + module persistence)
 #else
 #define RENOWN_CAN_USE(player, proto) (player)->CanUseItem(proto)
 #define RENOWN_PLAY_TARGET PLAY_TARGET
+#define RENOWN_EVENT_OFFSET 1000  // the WotLK database uses 1100+ for its own events: ours are 2100-2132
 #define RENOWN_TALENTS 0
 #define RENOWN_MANUAL_DAILIES 0
 #endif

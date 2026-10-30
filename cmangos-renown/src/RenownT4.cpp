@@ -46,9 +46,9 @@ namespace cmangos_module
         const uint32 T4_MAP = 0;
         const uint32 T4_ZONE = 139;          // Eastern Plaguelands
         const uint32 T4_STRATHOLME = 329;
-        const uint16 T4_EVENT_HELD_ALLIANCE = 1130;
-        const uint16 T4_EVENT_HELD_HORDE = 1131;
-        const uint16 T4_EVENT_KEEPS_CLEARED = 1132;
+        const uint16 T4_EVENT_HELD_ALLIANCE = 1130 + RENOWN_EVENT_OFFSET;
+        const uint16 T4_EVENT_HELD_HORDE = 1131 + RENOWN_EVENT_OFFSET;
+        const uint16 T4_EVENT_KEEPS_CLEARED = 1132 + RENOWN_EVENT_OFFSET;
         const uint32 T4_LORD_ALLIANCE = 190850;   // Marshal of Darrowshire
         const uint32 T4_LORD_HORDE = 190851;      // Warlord of Northdale
 

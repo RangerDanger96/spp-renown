@@ -51,10 +51,10 @@ namespace cmangos_module
         }
 
         const uint32 RVR_MAP = 1;
-        const uint16 RVR_EVENT_WILDLIFE = 1112;         // active = the lake's wildlife and centaurs are despawned
-        const uint16 RVR_EVENT_BASE = 1100;            // + objective * 3 + state (0 neutral, 1 alliance, 2 horde)
-        const uint16 RVR_EVENT_SIEGE_NORTHWATCH = 1110; // alliance commander out (horde attacks)
-        const uint16 RVR_EVENT_SIEGE_CROSSROADS = 1111; // horde commander out (alliance attacks)
+        const uint16 RVR_EVENT_WILDLIFE = 1112 + RENOWN_EVENT_OFFSET;         // active = the lake's wildlife and centaurs are despawned
+        const uint16 RVR_EVENT_BASE = 1100 + RENOWN_EVENT_OFFSET;            // + objective * 3 + state (0 neutral, 1 alliance, 2 horde)
+        const uint16 RVR_EVENT_SIEGE_NORTHWATCH = 1110 + RENOWN_EVENT_OFFSET; // alliance commander out (horde attacks)
+        const uint16 RVR_EVENT_SIEGE_CROSSROADS = 1111 + RENOWN_EVENT_OFFSET; // horde commander out (alliance attacks)
         const uint32 RVR_COMMANDER_ALLIANCE = 190812;
         const uint32 RVR_COMMANDER_HORDE = 190813;
         const uint32 RVR_CHICKEN_DISPLAY = 304;
