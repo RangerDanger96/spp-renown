@@ -55,8 +55,9 @@ BRACKETS=[ # (key, title prefix, required level, base target level, stat budget 
  ("t3","Lancer's",30,39,27),
  ("t4","Veteran's",40,49,34),
  ("t5","Vanguard's",50,59,42),
+ ("t6","Frontline",60,57,46),   # level 60 green starter set (no insignia needed)
 ]
-NEW_BRACKET_BASE={"t2":191000,"t3":191100,"t4":191200,"t5":191300}   # later brackets: fixed ID blocks
+NEW_BRACKET_BASE={"t2":191000,"t3":191100,"t4":191200,"t5":191300,"t6":191400}   # later brackets: fixed ID blocks
 def base(cls,sub,invs,target,span=3):
     inv=",".join(map(str,invs))
     r=q(f"""SELECT entry FROM item_template WHERE class={cls} AND subclass={sub} AND InventoryType IN ({inv})

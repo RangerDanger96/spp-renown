@@ -67,6 +67,7 @@ w("(59000,10,1,'Show me the Renown rewards.',0,3,4,0,0,0,0,0,'',0,0);")
 w("")
 import lowgear
 TIER_COST=[500,750,1000,1400,1800,2500,3000,3500,6000]   # T1..T9 base Renown cost (chest/legs/two-hander); ~400 Renown per BG
+FRONTLINE_COST=400                    # level 60 "Frontline" green starter set, no insignia needed
 T0_COST=300                           # level 1-9 "Recruit's" set (~6-7 BGs for a full set), no insignia needed
 SLOT_MULT={1:0.9,3:0.9,5:1.0,20:1.0,7:1.0,17:1.0,10:0.75,8:0.75,6:0.75,9:0.5,16:0.6,11:0.6,2:0.6,12:0.6,
            13:0.8,21:0.8,22:0.6,14:0.6,23:0.6,15:0.6,26:0.6,25:0.6,19:0.5}
@@ -74,11 +75,11 @@ def cost(base,inv): return max(5,int(round(base*SLOT_MULT.get(inv,0.7)/5.0))*5)
 
 gear=lowgear.build()
 w("-- Renown sets: Recruit's 1-9, Skirmisher's 10-19, Footman's 20-29, Lancer's 30-39, Veteran's 40-49, Vanguard's 50-59")
-w("DELETE FROM item_template WHERE entry BETWEEN 190600 AND 190799 OR entry BETWEEN 191000 AND 191399;")
+w("DELETE FROM item_template WHERE entry BETWEEN 190600 AND 190799 OR entry BETWEEN 191000 AND 191499;")
 for it in gear:
     # armor first: MySQL applies SET left to right, so ItemLevel is still the base item's here
     sets=[f"armor=IF(ItemLevel>{it['ilvl']}, ROUND(armor*{it['ilvl']}/ItemLevel), armor)" if it.get('scale_armor') else "armor=armor",
-          f"entry={it['entry']}", "name='"+it['name'].replace("'","''")+"'", "Quality=3", f"ItemLevel={it['ilvl']}",
+          f"entry={it['entry']}", "name='"+it['name'].replace("'","''")+"'", "Quality=2" if it['bracket']=='t6' else "Quality=3", f"ItemLevel={60 if it['bracket']=='t6' else it['ilvl']}",
           f"RequiredLevel={it['req']}", "BuyCount=1", "SellPrice=0", "bonding=1", "AllowableClass=-1", "AllowableRace=-1",
           "RandomProperty=0", "itemset=0", "description='Renown reward'", "Flags=0", "RequiredReputationFaction=0",
           "RequiredReputationRank=0", "requiredhonorrank=0", "startquest=0", "minMoneyLoot=0", "maxMoneyLoot=0"]
@@ -107,6 +108,7 @@ for e in (15126,15127):
 AV_BOTH=[19099,19100,19102,19103,19104,19106,19107,19108,20648,19105,19325,19308,19309,19310,19311,19312,19315,19323,19321,19324,19319,19320]
 AV_SIDE={'A':[19084,19086,19091,19092,19093,19094,19097,19098],'H':[19083,19085,19087,19088,19089,19090,19095,19096]}
 RANK_VENDOR={'A':12777,'H':12792}
+c_lvl60=lvl_ge(60)
 counts={}
 for side,qm,arm,war,wsg in [('A',190100,190108,190110,14753),('H',190101,190109,190111,14754)]:
     slot={qm:0,arm:0,war:0}; seen=set()
@@ -121,6 +123,9 @@ for side,qm,arm,war,wsg in [('A',190100,190108,190110,14753),('H',190101,190109,
         inv=int(q(f"select InventoryType from item_template where entry={it['base']}")[0][0])
         if it['bracket']=='t0':
             add(qm,it['entry'],59110,None,inv,'Renown Recruit\'s, levels 1-9'); costs[it['entry']]=cost(T0_COST,inv); tiers[it['entry']]=0
+            continue
+        if it['bracket']=='t6':   # level 60 green starter set: no insignia, only level 60
+            add(arm,it['entry'],c_lvl60,None,inv,'Renown Frontline set (level 60 greens)'); costs[it['entry']]=cost(FRONTLINE_COST,inv); tiers[it['entry']]=0
             continue
         t=BRACKET_TIER[it['bracket']]; lo,hi=BRACKET_LVL[it['bracket']]
         cond=59112 if it['bracket']=='t1' else band(lo,hi,t)
