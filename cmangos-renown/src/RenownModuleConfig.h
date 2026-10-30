@@ -36,6 +36,9 @@ namespace cmangos_module
         uint32 lootBagItemChanceGold;
         uint32 lootBagItemChancePurple;
         uint32 lootBagItemChanceBlue;
+        uint32 lootBagKillChance;
+        uint32 lootBagPointsGreen;
+        bool lootBagEnchants;
         bool lootBagDungeonLoot;
 
         bool streaks;

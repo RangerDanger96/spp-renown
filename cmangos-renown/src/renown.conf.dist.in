@@ -45,6 +45,10 @@
 #
 #    Renown.LootBags.GoldPoints / PurplePoints / BluePoints            Renown points in each bag
 #    Renown.LootBags.GoldItemChance / PurpleItemChance / BlueItemChance  Chance (%) the bag also holds gear
+#    Renown.LootBags.KillChance    Chance (%) per contributor to win a bag for an enemy player kill on the fronts or in the
+#                                  open world (not in battlegrounds): 80% green, 18% blue, 2% purple bags
+#    Renown.LootBags.GreenPoints   Renown points in a green bag (always holds gear when any fits)
+#    Renown.LootBags.Enchants      1 = bag gear can roll a random bonus enchantment (more likely in better bags)
 #    Renown.LootBags.DungeonLoot   1 = the gear is a random drop from an on-level dungeon (Renown gear below level 13
 #                                  or when nothing fits), 0 = always Renown vendor gear. Default: 1
 #
@@ -149,6 +153,9 @@ Renown.LootBags.PurplePoints = 60
 Renown.LootBags.BluePoints = 30
 Renown.LootBags.GoldItemChance = 100
 Renown.LootBags.PurpleItemChance = 50
+Renown.LootBags.KillChance = 5
+Renown.LootBags.GreenPoints = 20
+Renown.LootBags.Enchants = 1
 Renown.LootBags.BlueItemChance = 25
 Renown.LootBags.DungeonLoot = 1
 

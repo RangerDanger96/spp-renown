@@ -189,14 +189,18 @@ namespace cmangos_module
         void LoadVendorCosts();
 
         // Loot bags
-        enum BagType { BAG_GOLD = 0, BAG_PURPLE = 1, BAG_BLUE = 2 };
+        enum BagType { BAG_GOLD = 0, BAG_PURPLE = 1, BAG_BLUE = 2, BAG_GREEN = 3 };
         void AwardLootBags(BattleGround* battleground, uint32 winnerTeam);
         void GiveLootBag(Player* player, BagType bag);
         uint32 PickRewardItem(Player* player) const;
         struct DungeonLoot { uint32 item; uint32 map; uint32 reqLevel; uint32 quality; };
         void LoadDungeonLoot();
         uint32 PickDungeonItem(Player* player, BagType bag, uint32& map) const;
-        void GiveItem(Player* player, uint32 itemId, const std::string& subject);
+        void GiveItem(Player* player, uint32 itemId, const std::string& subject, uint32 enchantId = 0);
+        uint32 RollBagEnchant(Player* player, uint32 itemId, BagType bag) const;   // 0 = no bonus
+        void RollKillBags(Player* killer, Player* victim, const std::vector<uint32>& contributors);
+        std::mutex m_killBagMutex;
+        std::unordered_map<uint64, time_t> m_killBagLast;   // (looter << 32 | victim) -> last roll
         uint32 GetRenownTier(Player* player) const;   // highest unlocked reward tier (0 = none)
 
         // ---- War board quests

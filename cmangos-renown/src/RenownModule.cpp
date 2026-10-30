@@ -685,7 +685,7 @@ namespace cmangos_module
         {
             wanted = ITEM_QUALITY_EPIC;
         }
-        else if (bag == BAG_BLUE && urand(1, 100) <= 70)
+        else if ((bag == BAG_BLUE && urand(1, 100) <= 70) || bag == BAG_GREEN)
         {
             wanted = ITEM_QUALITY_UNCOMMON;
         }
@@ -878,11 +878,22 @@ namespace cmangos_module
         return 0;
     }
 
-    void RenownModule::GiveItem(Player* player, uint32 itemId, const std::string& subject)
+    // Bonus enchantments live in the last random-property slot, so the normal enchanting slot stays free
+    static const EnchantmentSlot BAG_ENCHANT_SLOT = PROP_ENCHANTMENT_SLOT_3;
+
+    void RenownModule::GiveItem(Player* player, uint32 itemId, const std::string& subject, uint32 enchantId)
     {
-        if (player->StoreNewItemInBestSlots(itemId, 1))
+        ItemPosCountVec dest;
+        if (player->CanStoreNewItem(INVENTORY_SLOT_BAG_0, NULL_SLOT, dest, itemId, 1) == EQUIP_ERR_OK)
         {
-            return;
+            if (Item* item = player->StoreNewItem(dest, itemId, true, Item::GenerateItemRandomPropertyId(itemId)))
+            {
+                if (enchantId)
+                {
+                    item->SetEnchantment(BAG_ENCHANT_SLOT, enchantId, 0, 0);
+                }
+                return;
+            }
         }
 
         // Bags full: send it by mail
@@ -891,6 +902,10 @@ namespace cmangos_module
             if (const int32 randomProperty = Item::GenerateItemRandomPropertyId(itemId))
             {
                 item->SetItemRandomProperties(randomProperty);
+            }
+            if (enchantId)
+            {
+                item->SetEnchantment(BAG_ENCHANT_SLOT, enchantId, 0, 0);
             }
 
             CharacterDatabase.BeginTransaction();
@@ -901,12 +916,118 @@ namespace cmangos_module
         }
     }
 
+    uint32 RenownModule::RollBagEnchant(Player* player, uint32 itemId, BagType bag) const
+    {
+        ItemPrototype const* proto = ObjectMgr::GetItemPrototype(itemId);
+        if (!proto || !player || (proto->Class != ITEM_CLASS_WEAPON && proto->Class != ITEM_CLASS_ARMOR))
+        {
+            return 0;
+        }
+
+        // Chance and size by bag: green 25% minor, blue 50%, purple always, gold always and bigger
+        static const uint32 chance[] = { 100, 100, 50, 25 };
+        static const float scale[] = { 1.2f, 1.0f, 0.85f, 0.6f };
+        if (urand(1, 100) > chance[bag])
+        {
+            return 0;
+        }
+
+        // Rare weapon procs: purple 10%, gold 25% (melee weapons only)
+        const bool melee = proto->Class == ITEM_CLASS_WEAPON && proto->SubClass != ITEM_SUBCLASS_WEAPON_BOW &&
+                           proto->SubClass != ITEM_SUBCLASS_WEAPON_GUN && proto->SubClass != ITEM_SUBCLASS_WEAPON_CROSSBOW &&
+                           proto->SubClass != ITEM_SUBCLASS_WEAPON_WAND && proto->SubClass != ITEM_SUBCLASS_WEAPON_THROWN;
+        const uint32 procChance = bag == BAG_GOLD ? 25 : (bag == BAG_PURPLE ? 10 : 0);
+        if (melee && procChance && urand(1, 100) <= procChance)
+        {
+            const uint8 cls = player->getClass();
+            const bool caster = cls == CLASS_MAGE || cls == CLASS_PRIEST || cls == CLASS_WARLOCK;
+            if (caster)
+            {
+                return 2504;                                   // Spell Damage +30
+            }
+            static const uint32 procs[] = { 1900, 803, 1898, 1894 };   // Crusader, Fiery Weapon, Lifestealing, Icy Weapon
+            return procs[urand(0, 3)];
+        }
+
+        // Stat bonus sized by item level
+        int32 value = int32(std::round(std::max<uint32>(proto->ItemLevel, 6) / 6.0f * scale[bag]));
+        value = std::max<int32>(1, std::min<int32>(30, value + irand(-1, 1)));
+
+        // Spell item enchantment ids for +1..+30 of each stat (the random-suffix enchantments of the client)
+        static const uint32 STR[] = { 68, 69, 70, 106, 107, 108, 109, 352, 357, 362, 367, 372, 410, 412, 684, 1043, 1044, 1045, 1046, 1047, 1048, 1049, 1050, 1051, 1052, 1053, 1054, 1055, 1056, 1057 };
+        static const uint32 AGI[] = { 74, 75, 76, 90, 91, 92, 93, 343, 349, 358, 363, 368, 403, 404, 883, 983, 1094, 1095, 1096, 1097, 1098, 1099, 1100, 1101, 1102, 1103, 1104, 1105, 1106, 1107 };
+        static const uint32 STA[] = { 71, 72, 73, 102, 103, 104, 105, 353, 356, 361, 366, 371, 409, 411, 1068, 1069, 1070, 1071, 1072, 1073, 1074, 1075, 1076, 1077, 1078, 1079, 1080, 1081, 1082, 1083 };
+        static const uint32 INT[] = { 79, 80, 81, 94, 95, 96, 97, 350, 354, 359, 364, 369, 405, 406, 1118, 1119, 1120, 1121, 1122, 1123, 1124, 1125, 1126, 1127, 1128, 1129, 1130, 1131, 1132, 1133 };
+        static const uint32 SPI[] = { 82, 83, 84, 98, 99, 100, 101, 351, 355, 360, 365, 370, 407, 408, 1144, 1145, 1146, 1147, 1148, 1149, 1150, 1151, 1152, 1153, 1154, 1155, 1156, 1157, 1158, 1159 };
+
+        // Stats that fit the class: first 50%, second 30%, third 20%
+        const uint32* pool[3];
+        switch (player->getClass())
+        {
+            case CLASS_WARRIOR: pool[0] = STR; pool[1] = STA; pool[2] = AGI; break;
+            case CLASS_PALADIN: pool[0] = STR; pool[1] = STA; pool[2] = INT; break;
+            case CLASS_HUNTER:  pool[0] = AGI; pool[1] = STA; pool[2] = INT; break;
+            case CLASS_ROGUE:   pool[0] = AGI; pool[1] = STA; pool[2] = STR; break;
+            case CLASS_DRUID:
+            case CLASS_SHAMAN:  pool[0] = INT; pool[1] = STA; pool[2] = AGI; break;
+            default:            pool[0] = INT; pool[1] = STA; pool[2] = SPI; break;
+        }
+        const uint32 roll = urand(1, 100);
+        const uint32* table = roll <= 50 ? pool[0] : (roll <= 80 ? pool[1] : pool[2]);
+        return table[value - 1];
+    }
+
+    void RenownModule::RollKillBags(Player* killer, Player* victim, const std::vector<uint32>& contributors)
+    {
+        const RenownModuleConfig* config = GetConfig();
+        if (!config->lootBags || !config->lootBagKillChance || !killer || !victim || killer->InBattleGround())
+        {
+            return;
+        }
+
+        const uint32 victimId = victim->GetObjectGuid().GetCounter();
+        const time_t now = time(nullptr);
+        for (uint32 id : contributors)
+        {
+            Player* looter = id == killer->GetObjectGuid().GetCounter() ? killer : sObjectMgr.GetPlayer(ObjectGuid(HIGHGUID_PLAYER, id));
+            if (!looter || !looter->isRealPlayer() || !looter->IsInWorld() || looter->GetMap() != killer->GetMap() ||
+                    looter->InBattleGround() || looter->GetTeam() == victim->GetTeam() ||
+                    MaNGOS::XP::IsTrivialLevelDifference(looter->GetLevel(), victim->GetLevel()))
+            {
+                continue;
+            }
+
+            // No farming the same victim: one roll per looter and victim every 5 minutes
+            {
+                std::lock_guard<std::mutex> lock(m_killBagMutex);
+                time_t& last = m_killBagLast[(uint64(id) << 32) | victimId];
+                if (now - last < 5 * MINUTE)
+                {
+                    continue;
+                }
+                last = now;
+                if (m_killBagLast.size() > 20000)
+                {
+                    m_killBagLast.clear();
+                }
+            }
+
+            if (urand(1, 100) > config->lootBagKillChance)
+            {
+                continue;
+            }
+
+            const uint32 roll = urand(1, 100);
+            GiveLootBag(looter, roll <= 80 ? BAG_GREEN : (roll <= 98 ? BAG_BLUE : BAG_PURPLE));
+        }
+    }
+
     void RenownModule::GiveLootBag(Player* player, BagType bag)
     {
         const RenownModuleConfig* config = GetConfig();
-        static const char* names[] = { "|cffff8000Gold Loot Bag|r", "|cffa335eePurple Loot Bag|r", "|cff0070ddBlue Loot Bag|r" };
-        const uint32 points[] = { config->lootBagPointsGold, config->lootBagPointsPurple, config->lootBagPointsBlue };
-        const uint32 chances[] = { config->lootBagItemChanceGold, config->lootBagItemChancePurple, config->lootBagItemChanceBlue };
+        static const char* names[] = { "|cffff8000Gold Loot Bag|r", "|cffa335eePurple Loot Bag|r", "|cff0070ddBlue Loot Bag|r", "|cff1eff00Green Loot Bag|r" };
+        const uint32 points[] = { config->lootBagPointsGold, config->lootBagPointsPurple, config->lootBagPointsBlue, config->lootBagPointsGreen };
+        const uint32 chances[] = { config->lootBagItemChanceGold, config->lootBagItemChancePurple, config->lootBagItemChanceBlue, 100 };
 
         std::ostringstream message;
         message << "|cffffd100[Renown]|r You won a " << names[bag] << "!";
@@ -932,11 +1053,20 @@ namespace cmangos_module
             static const char* qualityColor[] = { "ff9d9d9d", "ffffffff", "ff1eff00", "ff0070dd", "ffa335ee", "ffff8000" };
             const uint32 quality = proto ? std::min<uint32>(proto->Quality, 5) : 1;
             message << " It holds |c" << qualityColor[quality] << "|Hitem:" << itemId << ":0:0:0|h[" << (proto ? proto->Name1 : "item") << "]|h|r";
+            const uint32 enchantId = config->lootBagEnchants ? RollBagEnchant(player, itemId, bag) : 0;
+            if (enchantId)
+            {
+                SpellItemEnchantmentEntry const* ench = sSpellItemEnchantmentStore.LookupEntry(enchantId);
+                if (ench && ench->description[0] && *ench->description[0])
+                {
+                    message << " |cff1eff00(" << ench->description[0] << ")|r";
+                }
+            }
             if (dungeon)
             {
                 message << " from " << DungeonName(dungeon);
             }
-            GiveItem(player, itemId, "Loot bag reward");
+            GiveItem(player, itemId, "Loot bag reward", enchantId);
             message << " and " << renown << " Renown.";
         }
         else
@@ -1217,6 +1347,7 @@ namespace cmangos_module
         }
 
         // Healing assists: healers who kept any of the attackers alive
+        std::vector<uint32> contributors = { player->GetObjectGuid().GetCounter() };
         if (config->pointsHealAssist)
         {
             std::vector<uint32> healers;
@@ -1237,6 +1368,7 @@ namespace cmangos_module
 
                     m_attackers.erase(itr);
                 }
+                contributors = attackers;
 
                 for (uint32 attacker : attackers)
                 {
@@ -1272,7 +1404,12 @@ namespace cmangos_module
                     FrontOnHealAssist(healer);
                 }
             }
+
+            contributors.insert(contributors.end(), healers.begin(), healers.end());
         }
+
+        // Loot bags for enemy player kills on the fronts and in the open world
+        RollKillBags(player, victim, contributors);
     }
 
     bool RenownModule::OnPreGossipHello(Player* player, Creature* creature)

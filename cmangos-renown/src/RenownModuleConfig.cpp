@@ -49,6 +49,9 @@ namespace cmangos_module
     , lootBagItemChanceGold(100)
     , lootBagItemChancePurple(50)
     , lootBagItemChanceBlue(25)
+    , lootBagKillChance(5)
+    , lootBagPointsGreen(20)
+    , lootBagEnchants(true)
     , lootBagDungeonLoot(true)
     , streaks(true)
     , streakBonusPerKill(2)
@@ -133,6 +136,9 @@ namespace cmangos_module
         lootBagItemChanceGold = config.GetIntDefault("Renown.LootBags.GoldItemChance", 100);
         lootBagItemChancePurple = config.GetIntDefault("Renown.LootBags.PurpleItemChance", 50);
         lootBagItemChanceBlue = config.GetIntDefault("Renown.LootBags.BlueItemChance", 25);
+        lootBagKillChance = config.GetIntDefault("Renown.LootBags.KillChance", 5);
+        lootBagPointsGreen = config.GetIntDefault("Renown.LootBags.GreenPoints", 20);
+        lootBagEnchants = config.GetBoolDefault("Renown.LootBags.Enchants", true);
         lootBagDungeonLoot = config.GetBoolDefault("Renown.LootBags.DungeonLoot", true);
 
         streaks = config.GetBoolDefault("Renown.Streaks", true);
