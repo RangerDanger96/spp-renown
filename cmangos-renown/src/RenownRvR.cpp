@@ -1,8 +1,9 @@
 // The Barrens Front: a Warhammer style tier 1 RvR lake for the Renown module.
 //
 // Horde stage at the Crossroads, the Alliance at Northwatch Hold. Three battlefield objectives lie between
-// them: Kolkar Watch (Horde side), the Stagnant Oasis (center, needs both towers) and the Raptor Grounds
-// (Alliance side). Holding all three for a while opens a siege on the enemy field commander; killing the
+// them: Kolkar Watch (Horde side), the Stagnant Oasis (center) and the Raptor Grounds (Alliance side). They are
+// taken in order along the lane: your own tower, then the Oasis, then the enemy tower. Objectives, kills,
+// battlegrounds and war boards push a domination bar; a full bar opens a siege on the enemy field commander; killing the
 // commander locks the lake for the winners, hands out loot bags and resets it after a cooldown.
 //
 // Banners, objective guards and the commanders are world database spawns linked to server-side game events
@@ -752,13 +753,13 @@ namespace cmangos_module
             {
                 plan.attack = ownTower;                 // first secure our tower
             }
-            else if (m_rvrObjectives[enemyTower].owner != team)
-            {
-                plan.attack = enemyTower;               // then the enemy's (needed before the center)
-            }
             else if (m_rvrObjectives[center].owner != team)
             {
-                plan.attack = center;                   // both towers held: the Oasis is open to us
+                plan.attack = center;                   // then push to the Oasis
+            }
+            else if (m_rvrObjectives[enemyTower].owner != team)
+            {
+                plan.attack = enemyTower;               // and finally the enemy's tower
             }
             // else: all three held, waiting for the siege to open, everyone guards
 
@@ -1262,8 +1263,10 @@ namespace cmangos_module
                     team = HORDE;
                 }
 
-                // The center can only be taken by a side that holds both towers
-                const bool allowed = team && (o.tower || (m_rvrObjectives[0].owner == team && m_rvrObjectives[2].owner == team));
+                // The lane is taken in order: own tower -> Oasis -> enemy tower
+                const size_t ownTower = team == HORDE ? 0 : 2;
+                const size_t needs = !team || i == ownTower ? i : (i == 1 ? ownTower : 1);
+                const bool allowed = team && (needs == i || m_rvrObjectives[needs].owner == team);
                 if (team && team != o.owner && !allowed)
                 {
                     // Tell players why nothing happens (at most every 30 seconds each)
@@ -1274,8 +1277,8 @@ namespace cmangos_module
                         if (player->isRealPlayer() && now - last >= 30)
                         {
                             last = now;
-                            ChatHandler(player).PSendSysMessage("|cffffd100[Barrens Front]|r %s can only be captured once the %s holds both Kolkar Watch and the Raptor Grounds.",
-                                                                o.name, TeamName(team));
+                            ChatHandler(player).PSendSysMessage("|cffffd100[Barrens Front]|r Push along the lane: the %s must hold %s before it can capture %s.",
+                                                                TeamName(team), m_rvrObjectives[needs].name, o.name);
                         }
                     }
                 }

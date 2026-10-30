@@ -478,9 +478,9 @@ local function RefreshFront()
     elseif front.underdog and front.underdog > 0 then
         frontStatus:SetText("|cffffd100The " .. TEAM_NAME[front.underdog] .. " rallies:|r +25% Renown and faster captures.")
     elseif front.inLake then
-        frontStatus:SetText("|cff00ff00You are on the front.|r Hold both towers to take the Oasis.")
+        frontStatus:SetText("|cff00ff00You are on the front.|r Push the lane: your tower, the Oasis, then theirs.")
     else
-        frontStatus:SetText("Hold both towers to take the Oasis.")
+        frontStatus:SetText("Push the lane: your tower, the Oasis, then theirs.")
     end
     local level = UnitLevel("player") or 1
     if level > 19 then frontJoin:Disable() else frontJoin:Enable() end
@@ -673,6 +673,17 @@ local function MyTeam()
     return (UnitFactionGroup and UnitFactionGroup("player") == "Horde") and 2 or 1
 end
 
+-- Lane order: own tower (Kolkar for the Horde, Raptor for the Alliance) -> Oasis -> enemy tower.
+-- Returns the objective that must be held first, or nil when this one can be captured.
+local function NeedFirst(i)
+    local team = MyTeam()
+    local own = team == 2 and 1 or 3
+    if i == own then return nil end
+    local need = (i == 2) and own or 2
+    if front.owners[need] == team then return nil end
+    return OBJECTIVES[need]
+end
+
 local function RefreshCapture()
     local i = front.near or 0
     if i < 1 or i > 3 or not front.inLake or front.lock > 0 then
@@ -692,16 +703,16 @@ local function RefreshCapture()
         capBar:SetValue(100)
         if owner == MyTeam() then
             capText:SetText("Held by the " .. TEAM_NAME[owner] .. " - defend it")
-        elseif i == 2 and not (front.owners[1] == MyTeam() and front.owners[3] == MyTeam()) then
-            capText:SetText("Take both towers first")
+        elseif NeedFirst(i) then
+            capText:SetText("Take " .. NeedFirst(i) .. " first")
         else
             capText:SetText("Held by the " .. TEAM_NAME[owner] .. " - clear it to capture")
         end
     else
         capBar:SetStatusBarColor(0.6, 0.6, 0.6)
         capBar:SetValue(0)
-        if i == 2 and not (front.owners[1] == MyTeam() and front.owners[3] == MyTeam()) then
-            capText:SetText("Take both towers first")
+        if NeedFirst(i) then
+            capText:SetText("Take " .. NeedFirst(i) .. " first")
         else
             capText:SetText("Neutral - stand here to capture")
         end
