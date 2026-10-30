@@ -116,7 +116,8 @@ jobs:
         run: |
           if [ -f cfg.log ]; then grep -A4 "CMake Error" cfg.log | head -40 | while IFS= read -r line; do echo "::error::$line"; done; fi
           if [ ! -f build.log ]; then exit 0; fi
-          grep -E "error C[0-9]+|error LNK|fatal error" build.log | sort -u | head -40 | while IFS= read -r line; do echo "::error::$line"; done
+          grep -iE "error|cannot|failed" build.log | grep -v "warning" | sort -u | head -40 | while IFS= read -r line; do echo "::error::$line"; done
+          tail -25 build.log | while IFS= read -r line; do echo "::warning::$line"; done
 
       - name: Package
         shell: bash
