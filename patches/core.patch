@@ -132,8 +132,91 @@ index 48c1ab6..b51ae14 100644
 +    uint32 bracket_id = std::max(GetBracketForLevel(playerLevel), GetFirstBracketForBattleGround(bg));
      return BattleGroundBracketId(bracket_id);
  }
+diff --git a/src/game/BattleGround/BattleGroundWS.cpp b/src/game/BattleGround/BattleGroundWS.cpp
+index bf8e1e2..0caebad 100644
+--- a/src/game/BattleGround/BattleGroundWS.cpp
++++ b/src/game/BattleGround/BattleGroundWS.cpp
+@@ -24,6 +24,7 @@
+ #include "Globals/ObjectMgr.h"
+ #include "BattleGroundMgr.h"
+ #include "Server/WorldPacket.h"
++#include "Chat/Chat.h"
+ 
+ #ifdef ENABLE_MODULES
+ #include "ModuleMgr.h"
+@@ -42,6 +43,10 @@ void BattleGroundWS::Update(uint32 diff)
+ {
+     BattleGround::Update(diff);
+ 
++    if (GetStatus() != STATUS_IN_PROGRESS)
++        return;
++
++    UpdateMatchTimer(diff);
+     if (GetStatus() != STATUS_IN_PROGRESS)
+         return;
+ 
+@@ -205,6 +210,7 @@ void BattleGroundWS::ProcessPlayerFlagScoreEvent(Player* player)
+ 
+     // only flag capture should be updated
+     UpdatePlayerScore(player, SCORE_FLAG_CAPTURES, 1);      // +1 flag captures
++    m_lastCaptureTeam = team;
+ 
+     // Process match winner
+     Team winner = GetBgMap()->GetVariableManager().GetVariable(pointsWorldState) == BG_WS_MAX_TEAM_SCORE ? GetTeamIdByTeamIndex(teamIdx) : TEAM_NONE;
+@@ -504,11 +510,51 @@ bool BattleGroundWS::HandleEvent(uint32 eventId, Object* source, Object* target)
+     return false;
+ }
+ 
++void BattleGroundWS::UpdateMatchTimer(uint32 diff)
++{
++    const uint32 limit = 15 * MINUTE * IN_MILLISECONDS;
++    m_matchTimer += diff;
++
++    const uint32 warnAt[3] = { 5 * MINUTE * IN_MILLISECONDS, 1 * MINUTE * IN_MILLISECONDS, 0 };
++    const char* warnText[2] = { "5 minutes remain in the match!", "1 minute remains in the match!" };
++    for (uint8 i = m_matchWarned; i < 2; ++i)
++    {
++        if (m_matchTimer + warnAt[i] >= limit)
++        {
++            m_matchWarned = i + 1;
++            for (auto& itr : GetPlayers())
++                if (Player* plr = sObjectMgr.GetPlayer(itr.first))
++                    ChatHandler(plr).PSendSysMessage("|cffffd100[Warsong Gulch]|r %s", warnText[i]);
++        }
++    }
++
++    if (m_matchTimer < limit)
++        return;
++
++    const uint32 a = GetBgMap()->GetVariableManager().GetVariable(BG_WS_STATE_CAPTURES_ALLIANCE);
++    const uint32 h = GetBgMap()->GetVariableManager().GetVariable(BG_WS_STATE_CAPTURES_HORDE);
++    Team winner = a > h ? ALLIANCE : (h > a ? HORDE : m_lastCaptureTeam);   // tie: last team to capture, 0-0 is a draw
++
++    for (auto& itr : GetPlayers())
++        if (Player* plr = sObjectMgr.GetPlayer(itr.first))
++            ChatHandler(plr).PSendSysMessage("|cffffd100[Warsong Gulch]|r Time is up! %s", winner == ALLIANCE ? "The Alliance wins." : (winner == HORDE ? "The Horde wins." : "The match ends in a draw."));
++
++    GetBgMap()->GetVariableManager().SetVariable(BG_WS_STATE_FLAG_PICKED_UP_FLAG_STATE_ALLIANCE, 0);
++    GetBgMap()->GetVariableManager().SetVariable(BG_WS_STATE_FLAG_PICKED_UP_FLAG_STATE_HORDE, 0);
++    GetBgMap()->GetVariableManager().SetVariable(BG_WS_STATE_FLAG_ALLIANCE, BG_WS_FLAG_ICON_INVISIBLE);
++    GetBgMap()->GetVariableManager().SetVariable(BG_WS_STATE_FLAG_HORDE, BG_WS_FLAG_ICON_INVISIBLE);
++    EndBattleGround(winner);
++}
++
+ void BattleGroundWS::Reset()
+ {
+     // call parent's class reset
+     BattleGround::Reset();
+ 
++    m_matchTimer = 0;
++    m_matchWarned = 0;
++    m_lastCaptureTeam = TEAM_NONE;
++
+     GetBgMap()->GetVariableManager().SetVariable(BG_WS_STATE_CAPTURES_ALLIANCE, 0);
+     GetBgMap()->GetVariableManager().SetVariableData(BG_WS_STATE_CAPTURES_ALLIANCE, true, 0, 0);
+     GetBgMap()->GetVariableManager().SetVariable(BG_WS_STATE_CAPTURES_HORDE, 0);
 diff --git a/src/game/BattleGround/BattleGroundWS.h b/src/game/BattleGround/BattleGroundWS.h
-index 6e711ae..db7f79a 100644
+index 6e711ae..f311461 100644
 --- a/src/game/BattleGround/BattleGroundWS.h
 +++ b/src/game/BattleGround/BattleGroundWS.h
 @@ -189,8 +189,8 @@ class BattleGroundWGScore : public BattleGroundScore
@@ -147,6 +230,19 @@ index 6e711ae..db7f79a 100644
  
  class BattleGroundWS : public BattleGround
  {
+@@ -252,6 +252,12 @@ class BattleGroundWS : public BattleGround
+         uint32 m_flagsTimer[PVP_TEAM_COUNT];
+         uint32 m_flagsDropTimer[PVP_TEAM_COUNT];
+ 
++        // Renown realm: 15 minute match limit
++        uint32 m_matchTimer = 0;
++        uint8 m_matchWarned = 0;
++        Team m_lastCaptureTeam = TEAM_NONE;
++        void UpdateMatchTimer(uint32 diff);
++
+         uint32 m_reputationCapture;
+         uint32 m_honorWinKills;
+         uint32 m_honorEndKills;
 diff --git a/src/game/Entities/Pet.cpp b/src/game/Entities/Pet.cpp
 index 3a3308b..45f68e3 100644
 --- a/src/game/Entities/Pet.cpp
