@@ -139,7 +139,7 @@ namespace cmangos_module
             const uint32 sound = player->GetTeam() == ALLIANCE ? soundAlliance : soundHorde;
             if (sound)
             {
-                player->PlayDirectSound(sound, PlayPacketParameters(PlayPacketSettings::TARGET, player));
+                player->PlayDirectSound(sound, PlayPacketParameters(RENOWN_PLAY_TARGET, player));
             }
         }
     }

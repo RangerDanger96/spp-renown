@@ -1,0 +1,96 @@
+diff --git a/src/Module.h b/src/Module.h
+index f771ac7..9fd3295 100644
+--- a/src/Module.h
++++ b/src/Module.h
+@@ -30,6 +30,7 @@ struct FactionEntry;
+ struct GossipMenuItems;
+ struct LootItem;
+ struct PlayerLevelInfo;
++struct PlayerClassLevelInfo;
+ struct SpellEntry;
+ struct WorldSafeLocsEntry;
+ 
+@@ -185,6 +186,11 @@ namespace cmangos_module
+         virtual void OnSetReputation(Player* player, const FactionEntry* factionEntry, int32 standing, bool incremental) {}
+         // Called when retrieving the player level info
+         virtual void OnGetPlayerLevelInfo(Player* player, PlayerLevelInfo& info) {}
++        // SPP Renown additions
++        virtual void OnGetPlayerClassLevelInfo(Player* player, PlayerClassLevelInfo& info) {}
++        virtual void OnGetQuestXP(Player* player, const Quest* quest, uint32& xp) {}
++        virtual bool OnPreBuyItem(Player* player, Creature* vendor, uint32 itemId, uint32 count, uint32& price) { return false; }
++        virtual void OnBuyItem(Player* player, Creature* vendor, Item* item, uint32 count) {}
+         // Called when a player skill changes
+         virtual void OnUpdateSkill(Player* player, uint16 skillId) {}
+         // Called when a players kills a unit that rewards honor
+diff --git a/src/ModuleMgr.cpp b/src/ModuleMgr.cpp
+index 2e6003a..fdd09c1 100644
+--- a/src/ModuleMgr.cpp
++++ b/src/ModuleMgr.cpp
+@@ -454,6 +454,44 @@ namespace cmangos_module
+         }
+     }
+ 
++    void ModuleMgr::OnGetPlayerClassLevelInfo(Player* player, PlayerClassLevelInfo& info)
++    {
++        for (Module* mod : modules)
++        {
++            mod->OnGetPlayerClassLevelInfo(player, info);
++        }
++    }
++
++    void ModuleMgr::OnGetQuestXP(Player* player, const Quest* quest, uint32& xp)
++    {
++        for (Module* mod : modules)
++        {
++            mod->OnGetQuestXP(player, quest, xp);
++        }
++    }
++
++    bool ModuleMgr::OnPreBuyItem(Player* player, Creature* vendor, uint32 itemId, uint32 count, uint32& price)
++    {
++        bool handled = false;
++        for (Module* mod : modules)
++        {
++            if (mod->OnPreBuyItem(player, vendor, itemId, count, price))
++            {
++                handled = true;
++            }
++        }
++
++        return handled;
++    }
++
++    void ModuleMgr::OnBuyItem(Player* player, Creature* vendor, Item* item, uint32 count)
++    {
++        for (Module* mod : modules)
++        {
++            mod->OnBuyItem(player, vendor, item, count);
++        }
++    }
++
+     void ModuleMgr::OnSetVisibleItemSlot(Player* player, uint8 slot, Item* item)
+     {
+         for (Module* mod : modules)
+diff --git a/src/ModuleMgr.h b/src/ModuleMgr.h
+index 9a4c841..6bc6c4a 100644
+--- a/src/ModuleMgr.h
++++ b/src/ModuleMgr.h
+@@ -31,6 +31,7 @@ struct FactionEntry;
+ struct GossipMenuItems;
+ struct LootItem;
+ struct PlayerLevelInfo;
++struct PlayerClassLevelInfo;
+ struct SpellEntry;
+ struct WorldSafeLocsEntry;
+ 
+@@ -86,6 +87,10 @@ namespace cmangos_module
+         void OnSetReputation(Player* player, const FactionEntry* factionEntry, int32 standing, bool incremental);
+         void OnRewardQuest(Player* player, const Quest* quest);
+         void OnGetPlayerLevelInfo(Player* player, PlayerLevelInfo& info);
++        void OnGetPlayerClassLevelInfo(Player* player, PlayerClassLevelInfo& info);
++        void OnGetQuestXP(Player* player, const Quest* quest, uint32& xp);
++        bool OnPreBuyItem(Player* player, Creature* vendor, uint32 itemId, uint32 count, uint32& price);
++        void OnBuyItem(Player* player, Creature* vendor, Item* item, uint32 count);
+         void OnSetVisibleItemSlot(Player* player, uint8 slot, Item* item);
+         void OnMoveItemFromInventory(Player* player, Item* item);
+         void OnMoveItemToInventory(Player* player, Item* item);

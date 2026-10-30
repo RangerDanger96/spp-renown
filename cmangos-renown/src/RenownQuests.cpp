@@ -191,6 +191,9 @@ namespace cmangos_module
 
     void RenownModule::QuestsLoad(Player* player)
     {
+#if !RENOWN_MANUAL_DAILIES
+        return;   // native daily quests (character_queststatus_daily)
+#endif
         if (!m_questsReady)
         {
             return;
@@ -211,6 +214,7 @@ namespace cmangos_module
 
     void RenownModule::QuestsSave(Player* player)
     {
+#if RENOWN_MANUAL_DAILIES
         if (!m_questsReady)
         {
             return;
@@ -222,6 +226,9 @@ namespace cmangos_module
         {
             CharacterDatabase.PExecute("INSERT INTO `custom_renown_daily` (`guid`, `quest`, `day`) VALUES ('%u', '%u', '%u')", playerId, quest, m_questDay);
         }
+#else
+        (void)player;
+#endif
     }
 
     void RenownModule::QuestCredit(Player* player, uint32 creditEntry)

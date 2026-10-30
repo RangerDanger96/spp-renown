@@ -13,6 +13,19 @@
 #include <vector>
 #include "Entities/Object.h"
 
+// Expansion differences (EXPANSION: 0 = classic, 1 = tbc, 2 = wotlk)
+#if EXPANSION == 0
+#define RENOWN_CAN_USE(player, proto) (player)->CanUseItem(proto, false)
+#define RENOWN_PLAY_TARGET PlayPacketSettings::TARGET
+#define RENOWN_TALENTS 1          // WoW Forever warrior talents (classic only)
+#define RENOWN_MANUAL_DAILIES 1   // classic has no native daily quests (core patch + module persistence)
+#else
+#define RENOWN_CAN_USE(player, proto) (player)->CanUseItem(proto)
+#define RENOWN_PLAY_TARGET PLAY_TARGET
+#define RENOWN_TALENTS 0
+#define RENOWN_MANUAL_DAILIES 0
+#endif
+
 class ChatHandler;
 class Map;
 class Creature;
@@ -64,12 +77,14 @@ namespace cmangos_module
         void OnDealDamage(Unit* unit, Unit* victim, uint32 health, uint32 damage) override;
         void OnDealHeal(Unit* unit, Unit* victim, int32 gain, uint32 addHealth) override;
 
-        // WoW Forever warrior talents (RenownTalents.cpp)
+        // WoW Forever warrior talents (RenownTalents.cpp, classic only)
+#if RENOWN_TALENTS
         void OnRegenerate(Player* player, uint8 power, uint32 diff, float& addedValue) override;
         bool OnCalculateEffectiveCritChance(const Unit* unit, const Unit* victim, uint8 attType, const SpellEntry* ability, float& outChance) override;
         bool OnCalculateEffectiveMissChance(const Unit* unit, const Unit* victim, uint8 attType, const SpellEntry* ability, const Spell* const* currentSpells, const SpellPartialResistDistribution& spellPartialResistDistribution, float& outChance) override;
         void OnHit(Spell* spell, Unit* caster, Unit* victim) override;
         void OnCast(Spell* spell, Unit* caster, Unit* victim) override;
+#endif
         void TalentsInit();
         void TalentsOnDealDamage(Unit* dealer, Unit* victim, uint32 damage);
         void TalentsOnLogout(Player* player);

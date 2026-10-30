@@ -1,0 +1,117 @@
+diff --git a/src/game/Entities/Player.cpp b/src/game/Entities/Player.cpp
+index 81555a04e..6cc0161d2 100644
+--- a/src/game/Entities/Player.cpp
++++ b/src/game/Entities/Player.cpp
+@@ -3178,6 +3178,10 @@ void Player::InitStatsForLevel(bool reapplyMods)
+     uint32 plClass = getClass();
+     sObjectMgr.GetPlayerClassLevelInfo(plClass, level, &classInfo);
+ 
++#ifdef ENABLE_MODULES
++    sModuleMgr.OnGetPlayerClassLevelInfo(this, classInfo);
++#endif
++
+     PlayerLevelInfo info;
+     sObjectMgr.GetPlayerLevelInfo(getRace(), plClass, level, &info);
+ 
+@@ -14735,6 +14739,9 @@ void Player::RewardQuest(Quest const* pQuest, uint32 reward, Object* questGiver,
+ 
+     // Used for client inform but rewarded only in case not max level
+     uint32 xp = uint32(pQuest->GetXPReward(this) * GetMap()->GetXPModRate(RateModType::QUEST));
++#ifdef ENABLE_MODULES
++    sModuleMgr.OnGetQuestXP(this, pQuest, xp);
++#endif
+ 
+     if (GetLevel() < GetMaxAttainableLevel())
+     {
+@@ -20959,6 +20966,12 @@ bool Player::BuyItemFromVendorSlot(ObjectGuid vendorGuid, uint32 vendorslot, uin
+     if (price)
+         price = uint32(floor(price * GetReputationPriceDiscount(pCreature)));
+ 
++#ifdef ENABLE_MODULES
++    // SPP Renown: modules may replace the gold price (e.g. Renown point costs) or cancel the purchase
++    if (sModuleMgr.OnPreBuyItem(this, pCreature, item, count, price))
++        return false;
++#endif
++
+     if (GetMoney() < price)
+     {
+         SendBuyError(BUY_ERR_NOT_ENOUGHT_MONEY, pCreature, item, 0);
+@@ -21019,6 +21032,10 @@ bool Player::BuyItemFromVendorSlot(ObjectGuid vendorGuid, uint32 vendorslot, uin
+     if (!pItem)
+         return false;
+ 
++#ifdef ENABLE_MODULES
++    sModuleMgr.OnBuyItem(this, pCreature, pItem, count);
++#endif
++
+     uint32 new_count = pCreature->UpdateVendorItemCurrentCount(crItem, totalCount);
+ 
+     WorldPacket data(SMSG_BUY_ITEM, 8 + 4 + 4 + 4);
+diff --git a/src/game/Entities/Player.h b/src/game/Entities/Player.h
+index 0447f2d33..6e51a4b91 100644
+--- a/src/game/Entities/Player.h
++++ b/src/game/Entities/Player.h
+@@ -1100,6 +1100,13 @@ class Player : public Unit
+         void AddToWorld() override;
+         void RemoveFromWorld() override;
+ 
++        // SPP Renown: bolster (battlegrounds / RvR lake). Combat formulas treat the player as this level.
++        void SetBolsterLevel(uint32 level) { m_bolsterLevel = level; }
++        uint32 GetBolsterLevel() const { return m_bolsterLevel; }
++        uint32 GetEffectiveLevel() const { return std::max(GetLevel(), m_bolsterLevel); }
++        uint32 GetLevelForTarget(Unit const* /*target*/) const override { return GetEffectiveLevel(); }
++        uint32 m_bolsterLevel = 0;
++
+         bool TeleportTo(uint32 mapid, float x, float y, float z, float orientation, uint32 options = 0, AreaTrigger const* at = nullptr, GenericTransport* transport = nullptr);
+ 
+         bool TeleportTo(WorldLocation const& loc, uint32 options = 0)
+diff --git a/src/game/Entities/StatSystem.cpp b/src/game/Entities/StatSystem.cpp
+index 1b2411509..9c8bce05a 100644
+--- a/src/game/Entities/StatSystem.cpp
++++ b/src/game/Entities/StatSystem.cpp
+@@ -258,7 +258,7 @@ void Player::ApplyFeralAPBonus(int32 amount, bool apply)
+ void Player::UpdateAttackPowerAndDamage(bool ranged)
+ {
+     float val2 = 0.0f;
+-    float level = float(GetLevel());
++    float level = float(GetEffectiveLevel());     // SPP Renown: bolster
+ 
+     UnitMods unitMod = ranged ? UNIT_MOD_ATTACK_POWER_RANGED : UNIT_MOD_ATTACK_POWER;
+ 
+diff --git a/src/game/Entities/Unit.cpp b/src/game/Entities/Unit.cpp
+index 24a89a371..a9cbc690c 100644
+--- a/src/game/Entities/Unit.cpp
++++ b/src/game/Entities/Unit.cpp
+@@ -3260,7 +3260,8 @@ uint32 Unit::GetDefenseSkillValue(Unit const* target) const
+                        ? std::max(((Player*)this)->GetSkillMax(SKILL_DEFENSE), ((Player*)this)->GetSkillValue(SKILL_DEFENSE))
+                        : ((Player*)this)->GetSkillValue(SKILL_DEFENSE);
+         value += uint32(((Player*)this)->GetRatingBonusValue(CR_DEFENSE_SKILL));
+-        return value;
++        // SPP Renown: bolstered players fight with the skill of their bolster level
++        return std::max(value, ((Player*)this)->GetBolsterLevel() * 5);
+     }
+     return GetUnitMeleeSkill(target);
+ }
+@@ -4662,6 +4663,8 @@ uint32 Unit::GetWeaponSkillValue(WeaponAttackType attType, Unit const* target) c
+         value = (target && target->GetTypeId() == TYPEID_PLAYER)
+                 ? std::max(((Player*)this)->GetSkillMax(skill), ((Player*)this)->GetSkillValue(skill))
+                 : ((Player*)this)->GetSkillValue(skill);
++        // SPP Renown: bolstered players fight with the skill of their bolster level
++        value = std::max(value, ((Player*)this)->GetBolsterLevel() * 5);
+         // Modify value from ratings
+         value += uint32(((Player*)this)->GetRatingBonusValue(CR_WEAPON_SKILL));
+         switch (attType)
+diff --git a/src/game/OutdoorPvP/OutdoorPvPEP.h b/src/game/OutdoorPvP/OutdoorPvPEP.h
+index f9c8cb6bd..c852de822 100644
+--- a/src/game/OutdoorPvP/OutdoorPvPEP.h
++++ b/src/game/OutdoorPvP/OutdoorPvPEP.h
+@@ -230,6 +230,9 @@ class OutdoorPvPEP : public OutdoorPvP
+         void UnsummonSoldiers(const WorldObject* objRef);
+ 
+         Team m_towerOwner[MAX_EP_TOWERS];
++    public:
++        Team GetTowerOwner(uint32 towerId) const { return towerId < MAX_EP_TOWERS ? m_towerOwner[towerId] : TEAM_NONE; }
++    private:
+         uint32 m_towerWorldState[MAX_EP_TOWERS];
+         uint8 m_towersAlliance;
+         uint8 m_towersHorde;

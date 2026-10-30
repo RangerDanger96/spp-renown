@@ -3,6 +3,8 @@
 // client patch's Spell.dbc / Talent.dbc).
 #include "RenownModule.h"
 
+#if RENOWN_TALENTS
+
 #include "Entities/Player.h"
 #include "Entities/Item.h"
 #include "Spells/Spell.h"
@@ -274,3 +276,12 @@ namespace cmangos_module
         g_rage.erase(player->GetGUIDLow());
     }
 }
+
+#else
+namespace cmangos_module
+{
+    void RenownModule::TalentsInit() {}
+    void RenownModule::TalentsOnDealDamage(Unit*, Unit*, uint32) {}
+    void RenownModule::TalentsOnLogout(Player*) {}
+}
+#endif // RENOWN_TALENTS

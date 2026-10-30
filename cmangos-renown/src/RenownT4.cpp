@@ -211,7 +211,7 @@ namespace cmangos_module
             ChatHandler(player).PSendSysMessage("|cffffd100[Plaguelands Front]|r %s", text.c_str());
             if (sound)
             {
-                player->PlayDirectSound(sound, PlayPacketParameters(PlayPacketSettings::TARGET, player));
+                player->PlayDirectSound(sound, PlayPacketParameters(RENOWN_PLAY_TARGET, player));
             }
         }
     }

@@ -127,10 +127,12 @@ namespace cmangos_module
             SaveData(playerId, data);
         }
 
+#if RENOWN_MANUAL_DAILIES
         if (!player->GetDailyQuests().empty())
         {
             QuestsSave(player);
         }
+#endif
 
         InfluenceSave(player);
     }
@@ -294,7 +296,12 @@ namespace cmangos_module
             return 0;
         }
 
+#if EXPANSION == 0
         uint32 target = sBattleGroundMgr.GetMaxLevelForBattleGroundBracketId(bracketId, battleground->GetTypeId());
+#else
+        PvPDifficultyEntry const* bracket = GetBattlegroundBracketById(battleground->GetMapId(), bracketId);
+        uint32 target = bracket ? bracket->maxLevel : 0;
+#endif
         target = std::min(target, sWorld.getConfig(CONFIG_UINT32_MAX_PLAYER_LEVEL));
         return target > player->GetLevel() ? target : 0;
     }
@@ -733,7 +740,7 @@ namespace cmangos_module
                 }
 
                 ItemPrototype const* proto = ObjectMgr::GetItemPrototype(entry.item);
-                if (!proto || player->CanUseItem(proto, false) != EQUIP_ERR_OK || player->HasItemCount(entry.item, 1, true))
+                if (!proto || RENOWN_CAN_USE(player, proto) != EQUIP_ERR_OK || player->HasItemCount(entry.item, 1, true))
                 {
                     continue;
                 }
@@ -836,7 +843,7 @@ namespace cmangos_module
                     continue;
                 }
 
-                if (player->CanUseItem(proto, false) != EQUIP_ERR_OK)
+                if (RENOWN_CAN_USE(player, proto) != EQUIP_ERR_OK)
                 {
                     continue;
                 }
@@ -1475,7 +1482,7 @@ namespace cmangos_module
             return false;
         }
 
-        return player->isRealPlayer() || GetConfig()->botsEarnRenown;
+        return const_cast<Player*>(player)->isRealPlayer() || GetConfig()->botsEarnRenown;
     }
 
     RenownModule::RenownData RenownModule::GetData(uint32 playerId)

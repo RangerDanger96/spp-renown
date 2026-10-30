@@ -1,0 +1,146 @@
+diff --git a/playerbot/RandomPlayerbotMgr.cpp b/playerbot/RandomPlayerbotMgr.cpp
+index 3f32fd08..1970c614 100644
+--- a/playerbot/RandomPlayerbotMgr.cpp
++++ b/playerbot/RandomPlayerbotMgr.cpp
+@@ -3803,3 +3803,80 @@ float RandomPlayerbotMgr::GetMetricDelta(botPerformanceMetric& metric) const
+ 
+     return deltaMetric / metric.size();
+ }
++
++// SPP Renown: the Renown module calls this for the bots it sends to fight on the Barrens Front. On the front they
++// stop questing and travelling (which made them wander off to Ratchet); when they leave it they get their usual
++// strategies back.
++bool RenownBotFrontMode(Player* bot, bool on)
++{
++    PlayerbotAI* ai = bot ? bot->GetPlayerbotAI() : nullptr;
++    if (!ai || !sRandomPlayerbotMgr.IsRandomBot(bot))
++        return false;
++
++    if (on)
++    {
++        if (ai->HasStrategy("travel", BotState::BOT_STATE_NON_COMBAT) || ai->HasStrategy("rpg", BotState::BOT_STATE_NON_COMBAT) ||
++            ai->HasStrategy("tfish", BotState::BOT_STATE_NON_COMBAT))
++            ai->ChangeStrategy("-travel,-rpg,-tfish", BotState::BOT_STATE_NON_COMBAT);
++        return true;
++    }
++
++    ai->ResetStrategies();
++    return true;
++}
++
++// SPP Renown: warbands. A real player on the Barrens Front can call front bots into his party; they follow and fight
++// with him until he dismisses them or leaves the front.
++#include "Groups/Group.h"
++
++bool RenownBotJoinWarband(Player* bot, Player* leader)
++{
++    PlayerbotAI* ai = bot ? bot->GetPlayerbotAI() : nullptr;
++    if (!ai || !leader || !sRandomPlayerbotMgr.IsRandomBot(bot) || bot->GetGroup())
++        return false;
++
++    Group* group = leader->GetGroup();
++    if (!group)
++    {
++        group = new Group;
++        if (!group->Create(leader->GetObjectGuid(), leader->GetName()))
++        {
++            delete group;
++            return false;
++        }
++
++        sObjectMgr.AddGroup(group);
++    }
++
++    if (group->IsFull() || group->IsRaidGroup() || !group->AddMember(bot->GetObjectGuid(), bot->GetName()))
++        return false;
++
++    ai->SetMaster(leader);
++    ai->ResetStrategies();
++    // Stay at the leader's heels ("wander" lets them drift off and looks like standing around), and
++    // assist in combat: attack what the leader attacks or what attacks the party
++    ai->ChangeStrategy("-wander,+follow,+dps assist,-lfg,-bg,-travel,-rpg,-tfish,-grind", BotState::BOT_STATE_NON_COMBAT);
++    ai->ChangeStrategy("+dps assist,+pvp", BotState::BOT_STATE_COMBAT);
++    ai->Reset();
++    return true;
++}
++
++bool RenownBotLeaveWarband(Player* bot)
++{
++    PlayerbotAI* ai = bot ? bot->GetPlayerbotAI() : nullptr;
++    if (!ai)
++        return false;
++
++    if (Group* group = bot->GetGroup())
++    {
++        if (group->RemoveMember(bot->GetObjectGuid(), 0) <= 1)
++        {
++            // the group fell apart (only the leader left): RemoveMember already disbanded it
++        }
++    }
++
++    ai->SetMaster(nullptr);
++    ai->ResetStrategies();
++    ai->Reset();
++    return true;
++}
+diff --git a/playerbot/strategy/actions/BattleGroundJoinAction.cpp b/playerbot/strategy/actions/BattleGroundJoinAction.cpp
+index fd60b111..2b84753e 100644
+--- a/playerbot/strategy/actions/BattleGroundJoinAction.cpp
++++ b/playerbot/strategy/actions/BattleGroundJoinAction.cpp
+@@ -548,8 +548,8 @@ bool BGJoinAction::isUseful()
+     if ((time(0) - bot->GetInGameTime()) < 30)
+         return false;
+ 
+-    // check level
+-    if (bot->GetLevel() < 10)
++    // check level (SPP Renown: battlegrounds open at level 1)
++    if (bot->GetLevel() < 1)
+         return false;
+ 
+ #ifdef MANGOSBOT_TWO
+diff --git a/playerbot/strategy/actions/BattleGroundTactics.cpp b/playerbot/strategy/actions/BattleGroundTactics.cpp
+index 9cf991ac..cebe29a0 100644
+--- a/playerbot/strategy/actions/BattleGroundTactics.cpp
++++ b/playerbot/strategy/actions/BattleGroundTactics.cpp
+@@ -2850,8 +2850,12 @@ bool BGTactics::Execute(Event& event)
+         if (useBuff())
+             return true;
+ 
++        // SPP Renown: "pushers" (bg role 6-9, about 40% of a team) keep heading for the objective while in combat
++        // in Warsong Gulch and Arathi Basin, as long as they are healthy, instead of brawling in midfield forever
++        uint32 pushRole = context->GetValue<uint32>("bg role")->Get();
++        bool pusher = pushRole >= 6 && (bgType == BATTLEGROUND_WS || bgType == BATTLEGROUND_AB) && bot->GetHealthPercent() > 40.0f;
+ #ifdef MANGOSBOT_ZERO
+-        if (sServerFacade.IsInCombat(bot) && !(bot->HasAura(BG_WS_SPELL_WARSONG_FLAG) || bot->HasAura(BG_WS_SPELL_SILVERWING_FLAG)))
++        if (sServerFacade.IsInCombat(bot) && !pusher && !(bot->HasAura(BG_WS_SPELL_WARSONG_FLAG) || bot->HasAura(BG_WS_SPELL_SILVERWING_FLAG)))
+ #else
+         if (sServerFacade.IsInCombat(bot) && !(bot->HasAura(BG_WS_SPELL_WARSONG_FLAG) || bot->HasAura(BG_WS_SPELL_SILVERWING_FLAG) || bot->HasAura(EY_SPELL_NETHERSTORM_FLAG)))
+ #endif
+diff --git a/playerbot/strategy/generic/BattlegroundStrategy.cpp b/playerbot/strategy/generic/BattlegroundStrategy.cpp
+index 64c4bcc3..5103df46 100644
+--- a/playerbot/strategy/generic/BattlegroundStrategy.cpp
++++ b/playerbot/strategy/generic/BattlegroundStrategy.cpp
+@@ -84,6 +84,11 @@ void WarsongStrategy::InitNonCombatTriggers(std::list<TriggerNode*> &triggers)
+ void WarsongStrategy::InitCombatTriggers(std::list<TriggerNode*>& triggers)
+ {
+     InitNonCombatTriggers(triggers);
++
++    // SPP Renown: pushers keep moving to the objective in combat (the action itself skips everyone else)
++    triggers.push_back(new TriggerNode(
++        "bg active",
++        NextAction::array(0, new NextAction("bg move to objective", 35.0f), NULL)));
+ }
+ 
+ void AlteracStrategy::InitNonCombatTriggers(std::list<TriggerNode*> &triggers)
+@@ -124,6 +129,11 @@ void ArathiStrategy::InitNonCombatTriggers(std::list<TriggerNode*> &triggers)
+ void ArathiStrategy::InitCombatTriggers(std::list<TriggerNode*>& triggers)
+ {
+     InitNonCombatTriggers(triggers);
++
++    // SPP Renown: pushers keep moving to the objective in combat (the action itself skips everyone else)
++    triggers.push_back(new TriggerNode(
++        "bg active",
++        NextAction::array(0, new NextAction("bg move to objective", 35.0f), NULL)));
+ }
+ 
+ void EyeStrategy::InitNonCombatTriggers(std::list<TriggerNode*>& triggers)
