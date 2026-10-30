@@ -261,6 +261,12 @@ namespace cmangos_module
 
         AddRenown(player, weekly ? GetConfig()->questWeeklyRenown : GetConfig()->questDailyRenown, false);
 
+        // Barrens domination: tier 1 war board turn-ins
+        if (player->GetLevel() <= GetConfig()->rvrMaxLevel)
+        {
+            RvRDominate(player->GetTeam(), weekly ? 500 : 200);
+        }
+
         if (weekly)
         {
             GiveLootBag(player, BAG_PURPLE);

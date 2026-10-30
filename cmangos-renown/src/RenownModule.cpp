@@ -256,6 +256,12 @@ namespace cmangos_module
         // Rank by what was earned during the match, before the win/loss renown is added
         AwardLootBags(battleground, winnerTeam);
 
+        // Barrens domination: tier 1 battleground wins push the front
+        if (winnerTeam != TEAM_NONE && battleground->GetMaxLevel() <= GetConfig()->rvrMaxLevel)
+        {
+            RvRDominate(winnerTeam, 1000);
+        }
+
         for (const auto& entry : battleground->GetPlayers())
         {
             Player* player = sObjectMgr.GetPlayer(entry.first);
@@ -1095,6 +1101,13 @@ namespace cmangos_module
 
         Player* player = killer->GetBeneficiaryPlayer();
         const uint32 victimId = victim->GetObjectGuid().GetCounter();
+
+        // Barrens domination: enemy kills on the front
+        if (player && player != victim && player->GetTeam() != victim->GetTeam() && victim->IsInWorld() &&
+                victim->GetMapId() == 1 && victim->GetZoneId() == 17 && victim->GetLevel() <= GetConfig()->rvrMaxLevel)
+        {
+            RvRDominate(player->GetTeam(), player->isRealPlayer() ? 100 : 50);
+        }
 
         // Any death ends the victim's streak
         uint32 oldStreak = 0;

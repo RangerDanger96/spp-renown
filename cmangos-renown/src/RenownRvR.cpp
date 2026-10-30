@@ -180,6 +180,7 @@ namespace cmangos_module
         m_rvrLockUntil = 0;
         m_rvrHoldTeam = 0;
         m_rvrHoldTime = 0;
+        m_rvrDom = 0;
         for (size_t i = 0; i < m_rvrObjectives.size(); ++i)
         {
             RvRSetOwner(i, 0, true);
@@ -239,6 +240,7 @@ namespace cmangos_module
 
         m_rvrLockTeam = team;
         m_rvrLockUntil = time(nullptr) + GetConfig()->rvrLockMinutes * MINUTE;
+        m_rvrDom = team == ALLIANCE ? 10000 : -10000;   // shown full for the winner while locked; reset clears it
 
         std::ostringstream text;
         text << "|cffffd100[Barrens Front]|r The " << TeamName(team) << " has won the Barrens Front! The front is locked for "
@@ -365,7 +367,45 @@ namespace cmangos_module
         }
 
         message << "/" << TeamState(m_frontUnderdog) << "/" << fortified;
+        message << "/" << int32(m_rvrDom) / 100 << "/" << RvRNearObjective(player);
         SendAddon(player, message.str());
+    }
+
+    uint32 RenownModule::RvRNearObjective(const Player* player) const
+    {
+        if (!RenownPlayerOk(player) || player->GetMapId() != RVR_MAP)
+        {
+            return 0;
+        }
+
+        const float radius = (float)GetConfig()->rvrCaptureRadius;
+        for (size_t i = 0; i < m_rvrObjectives.size(); ++i)
+        {
+            const RvRObjective& o = m_rvrObjectives[i];
+            const float dx = player->GetPositionX() - o.x, dy = player->GetPositionY() - o.y;
+            if (dx * dx + dy * dy <= radius * radius && std::fabs(player->GetPositionZ() - o.z) < 20.0f)
+            {
+                return uint32(i + 1);
+            }
+        }
+
+        return 0;
+    }
+
+    void RenownModule::RvRDominate(uint32 team, int32 amount)
+    {
+        if (!GetConfig()->rvrEnabled || m_rvrLockTeam || (team != ALLIANCE && team != HORDE) || amount <= 0)
+        {
+            return;
+        }
+
+        const int32 delta = team == ALLIANCE ? amount : -amount;
+        int32 current = m_rvrDom.load();
+        int32 next;
+        do
+        {
+            next = std::max<int32>(-10000, std::min<int32>(10000, current + delta));
+        } while (!m_rvrDom.compare_exchange_weak(current, next));
     }
 
     bool RenownModule::RvRInLakeArea(const Player* player) const
@@ -903,6 +943,7 @@ namespace cmangos_module
                                     orderNames[3], orders[side][3], orderNames[4], orders[side][4]);
         }
 
+        handler.PSendSysMessage("  Domination: %d%% (%s)", std::abs(int32(m_rvrDom)) / 100, m_rvrDom > 0 ? "Alliance" : (m_rvrDom < 0 ? "Horde" : "even"));
         handler.PSendSysMessage("  Siege: %s  Lock: %s (%us)  Last hour: %u captures, %u sieges",
                                 TeamName(m_rvrSiegeTeam), TeamName(m_rvrLockTeam), m_rvrLockUntil > now ? uint32(m_rvrLockUntil - now) : 0,
                                 uint32(m_rvrCaptureLog.size()), uint32(m_rvrSiegeLog.size()));
@@ -1256,6 +1297,7 @@ namespace cmangos_module
                         RvRSetOwner(i, team);
                         m_rvrCaptureLog.push_back(time(nullptr));
                         FrontOnCapture(i, team, previous, nearby[team == ALLIANCE ? 0 : 1]);
+                        RvRDominate(team, 500);
 
                         for (Player* player : nearby[team == ALLIANCE ? 0 : 1])
                         {
@@ -1280,42 +1322,39 @@ namespace cmangos_module
                 }
             }
 
-            // Holding the whole front opens a siege; losing any objective ends it
-            uint32 holder = 0;
-            if (RvROwnedBy(ALLIANCE) == 3)
+            // Domination: every held objective pushes the bar (towers 0.4%, the Oasis 0.6% every 5 seconds)
+            m_rvrDomTimer += diff;
+            if (m_rvrDomTimer >= 5 * IN_MILLISECONDS)
             {
-                holder = ALLIANCE;
-            }
-            else if (RvROwnedBy(HORDE) == 3)
-            {
-                holder = HORDE;
+                m_rvrDomTimer = 0;
+                for (size_t i = 0; i < m_rvrObjectives.size(); ++i)
+                {
+                    if (m_rvrObjectives[i].owner)
+                    {
+                        RvRDominate(m_rvrObjectives[i].owner, m_rvrObjectives[i].tower ? 40 : 60);
+                    }
+                }
             }
 
-            if (holder)
+            // A full bar opens the siege; the siege breaks if the enemy pushes the bar back below 75%
+            const int32 dom = m_rvrDom;
+            const uint32 full = dom >= 10000 ? ALLIANCE : (dom <= -10000 ? HORDE : 0);
+            if (!m_rvrSiegeTeam && full)
             {
-                if (m_rvrHoldTeam != holder)
-                {
-                    m_rvrHoldTeam = holder;
-                    m_rvrHoldTime = 0;
-                }
-
-                m_rvrHoldTime += diff;
-                if (!m_rvrSiegeTeam && m_rvrHoldTime >= config->rvrSiegeHold * IN_MILLISECONDS)
-                {
-                    RvRStartSiege(holder);
-                }
+                RvRStartSiege(full);
             }
-            else
+            else if (m_rvrSiegeTeam && (m_rvrSiegeTeam == ALLIANCE ? dom : -dom) < 7500)
             {
-                m_rvrHoldTeam = 0;
-                m_rvrHoldTime = 0;
-                if (m_rvrSiegeTeam)
-                {
-                    std::ostringstream text;
-                    text << "|cffffd100[Barrens Front]|r The " << TeamName(m_rvrSiegeTeam) << " siege has been broken. The commander retreats.";
-                    RvRStopSiege();
-                    RvRAnnounce(text.str());
-                }
+                std::ostringstream text;
+                text << "|cffffd100[Barrens Front]|r The " << TeamName(m_rvrSiegeTeam) << " siege has been broken. The commander retreats.";
+                RvRStopSiege();
+                RvRAnnounce(text.str());
+            }
+
+            if (dom / 100 != m_rvrDomSent)
+            {
+                m_rvrDomSent = dom / 100;
+                m_rvrDirty = true;
             }
 
             // Renown ticks for holding objectives
@@ -1373,7 +1412,7 @@ namespace cmangos_module
 
         // Status for the addon
         m_rvrStatusTimer += diff;
-        if (m_rvrDirty || m_rvrStatusTimer >= 10 * IN_MILLISECONDS)
+        if (m_rvrDirty || m_rvrStatusTimer >= 3 * IN_MILLISECONDS)
         {
             m_rvrDirty = false;
             m_rvrStatusTimer = 0;

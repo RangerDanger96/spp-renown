@@ -1,7 +1,8 @@
 -- RenownPvP: a pop-out PvP panel for the spp-renown server module (WoW 1.12 / Lua 5.0).
 --   * a small banner button (shift-drag to move) opens the panel
 --   * Renown summary, battleground queues from anywhere, the Barrens Front, the field mount
---   * a compact Barrens Front tracker while you are on the front, and banners on the Barrens world map
+--   * a Barrens Front HUD (domination bar, objectives, timers) and a capture bar while you are on the front,
+--     and banners on the Barrens world map
 
 RenownPvPDB = RenownPvPDB or {}
 
@@ -546,66 +547,239 @@ panel:SetScript("OnUpdate", function()
     end
 end)
 
--- ---------------------------------------------------------------- compact front tracker (while on the front)
-local tracker = CreateFrame("Frame", "RenownFrontTracker", UIParent)
-tracker:SetWidth(190)
-tracker:SetHeight(70)
+-- ---------------------------------------------------------------- front HUD (top of the screen while on the front)
+-- Domination bar (tug of war: Alliance fills from the left, Horde from the right), the three objectives and the
+-- front state with live countdowns. Shift-drag to move; /rpvp hudreset puts it back.
+local HUD_W = 330
+local tracker = CreateFrame("Frame", "RenownFrontHUD", UIParent)
+tracker:SetWidth(HUD_W)
+tracker:SetHeight(104)
+tracker:SetFrameStrata("MEDIUM")
+tracker:SetMovable(true)
+tracker:EnableMouse(true)
+tracker:RegisterForDrag("LeftButton")
+tracker:SetScript("OnDragStart", function() if IsShiftKeyDown() then this:StartMoving() end end)
+tracker:SetScript("OnDragStop", function()
+    this:StopMovingOrSizing()
+    local _, _, _, x, y = this:GetPoint()
+    RenownPvPDB.hud = { x = x, y = y }
+end)
 Backdrop(tracker)
+tracker:SetBackdropColor(0, 0, 0, 0.6)
 tracker:Hide()
-local trackerTitle = Label(tracker, "GameFontNormalSmall", "Barrens Front")
-trackerTitle:SetPoint("TOPLEFT", tracker, "TOPLEFT", 8, -7)
+
+local function PlaceHUD()
+    tracker:ClearAllPoints()
+    if RenownPvPDB.hud then
+        tracker:SetPoint("TOP", UIParent, "TOP", RenownPvPDB.hud.x, RenownPvPDB.hud.y)
+    else
+        tracker:SetPoint("TOP", UIParent, "TOP", 0, -24)
+    end
+end
+
+local hudTitle = tracker:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+hudTitle:SetPoint("TOP", tracker, "TOP", 0, -8)
+hudTitle:SetText("BARRENS FRONT")
+
+-- domination bar
+local DOM_W = HUD_W - 30
+local domBg = tracker:CreateTexture(nil, "BACKGROUND")
+domBg:SetTexture(0.05, 0.05, 0.05, 0.9)
+domBg:SetWidth(DOM_W)
+domBg:SetHeight(14)
+domBg:SetPoint("TOP", tracker, "TOP", 0, -26)
+local domA = tracker:CreateTexture(nil, "ARTWORK")
+domA:SetTexture("Interface\\TargetingFrame\\UI-StatusBar")
+domA:SetVertexColor(TEAM_COLOR[1][1], TEAM_COLOR[1][2], TEAM_COLOR[1][3])
+domA:SetHeight(14)
+domA:SetPoint("LEFT", domBg, "LEFT", 0, 0)
+local domH = tracker:CreateTexture(nil, "ARTWORK")
+domH:SetTexture("Interface\\TargetingFrame\\UI-StatusBar")
+domH:SetVertexColor(TEAM_COLOR[2][1], TEAM_COLOR[2][2], TEAM_COLOR[2][3])
+domH:SetHeight(14)
+domH:SetPoint("RIGHT", domBg, "RIGHT", 0, 0)
+local domMid = tracker:CreateTexture(nil, "OVERLAY")
+domMid:SetTexture(1, 1, 1, 0.6)
+domMid:SetWidth(1)
+domMid:SetHeight(18)
+domMid:SetPoint("CENTER", domBg, "CENTER", 0, 0)
+local domBorder = CreateFrame("Frame", nil, tracker)
+domBorder:SetPoint("TOPLEFT", domBg, "TOPLEFT", -3, 3)
+domBorder:SetPoint("BOTTOMRIGHT", domBg, "BOTTOMRIGHT", 3, -3)
+domBorder:SetBackdrop({ edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 10 })
+domBorder:SetBackdropBorderColor(0.85, 0.65, 0.20, 1)
+local domText = domBorder:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+domText:SetPoint("CENTER", domBg, "CENTER", 0, 0)
+local domLeft = tracker:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+domLeft:SetPoint("BOTTOMLEFT", domBg, "TOPLEFT", 0, 2)
+local domRight = tracker:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+domRight:SetPoint("BOTTOMRIGHT", domBg, "TOPRIGHT", 0, 2)
+
+-- objectives
 local trackerRows = {}
 for i = 1, 3 do
-    local row = {}
-    row.swatch = tracker:CreateTexture(nil, "ARTWORK")
-    row.swatch:SetWidth(9)
-    row.swatch:SetHeight(9)
-    row.swatch:SetPoint("TOPLEFT", tracker, "TOPLEFT", 9, -9 - i * 13)
-    row.label = Label(tracker, "GameFontHighlightSmall", OBJECTIVES[i])
-    row.label:SetPoint("LEFT", row.swatch, "RIGHT", 5, 0)
-    row.pct = Label(tracker, "GameFontHighlightSmall", "")
-    row.pct:SetPoint("RIGHT", tracker, "RIGHT", -8, 0)
-    row.pct:SetPoint("TOP", row.swatch, "TOP", 0, 1)
+    local row = CreateFrame("Frame", nil, tracker)
+    row:SetWidth(DOM_W / 3)
+    row:SetHeight(34)
+    row:SetPoint("TOPLEFT", domBg, "BOTTOMLEFT", (i - 1) * DOM_W / 3, -6)
+    row.icon = row:CreateTexture(nil, "ARTWORK")
+    row.icon:SetWidth(22)
+    row.icon:SetHeight(22)
+    row.icon:SetPoint("TOP", row, "TOP", 0, 0)
+    row.shield = row:CreateTexture(nil, "OVERLAY")
+    row.shield:SetTexture("Interface\\Icons\\INV_Shield_06")
+    row.shield:SetWidth(11)
+    row.shield:SetHeight(11)
+    row.shield:SetPoint("BOTTOMRIGHT", row.icon, "BOTTOMRIGHT", 4, -2)
+    row.label = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    row.label:SetPoint("TOP", row.icon, "BOTTOM", 0, -1)
+    row.label:SetText(OBJECTIVES[i])
+    row.state = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    row.state:SetPoint("TOP", row.label, "BOTTOM", 0, 0)
     trackerRows[i] = row
 end
 
-local function PlaceTracker()
-    tracker:ClearAllPoints()
-    local x = launcher:GetCenter()
-    if x and x > GetScreenWidth() / 2 then
-        tracker:SetPoint("TOPRIGHT", launcher, "BOTTOMRIGHT", 0, -4)
+local hudState = tracker:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+hudState:SetPoint("BOTTOM", tracker, "BOTTOM", 0, 7)
+
+-- personal capture bar (middle of the screen while you stand on an objective)
+local capFrame = CreateFrame("Frame", "RenownCaptureBar", UIParent)
+capFrame:SetWidth(240)
+capFrame:SetHeight(46)
+capFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 150)
+Backdrop(capFrame)
+capFrame:SetBackdropColor(0, 0, 0, 0.7)
+capFrame:Hide()
+local capName = capFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+capName:SetPoint("TOP", capFrame, "TOP", 0, -7)
+local capBar = CreateFrame("StatusBar", nil, capFrame)
+capBar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
+capBar:SetMinMaxValues(0, 100)
+capBar:SetWidth(210)
+capBar:SetHeight(12)
+capBar:SetPoint("BOTTOM", capFrame, "BOTTOM", 0, 8)
+local capBarBg = capBar:CreateTexture(nil, "BACKGROUND")
+capBarBg:SetAllPoints(capBar)
+capBarBg:SetTexture(0.1, 0.1, 0.1, 0.9)
+local capText = capBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+capText:SetPoint("CENTER", capBar, "CENTER", 0, 0)
+
+local function Clock(secs)
+    secs = math.max(0, math.floor(secs))
+    return string.format("%d:%02d", math.floor(secs / 60), math.mod(secs, 60))
+end
+
+local function MyTeam()
+    return (UnitFactionGroup and UnitFactionGroup("player") == "Horde") and 2 or 1
+end
+
+local function RefreshCapture()
+    local i = front.near or 0
+    if i < 1 or i > 3 or not front.inLake or front.lock > 0 then
+        capFrame:Hide()
+        return
+    end
+    capName:SetText(OBJECTIVES[i])
+    local owner, cap, pct = front.owners[i], front.cap[i], front.pct[i]
+    if cap > 0 and pct > 0 and cap ~= owner then
+        local c = TEAM_COLOR[cap]
+        capBar:SetStatusBarColor(c[1], c[2], c[3])
+        capBar:SetValue(pct)
+        capText:SetText(TEAM_NAME[cap] .. " capturing  " .. pct .. "%")
+    elseif owner > 0 then
+        local c = TEAM_COLOR[owner]
+        capBar:SetStatusBarColor(c[1], c[2], c[3])
+        capBar:SetValue(100)
+        if owner == MyTeam() then
+            capText:SetText("Held by the " .. TEAM_NAME[owner] .. " - defend it")
+        elseif i == 2 and not (front.owners[1] == MyTeam() and front.owners[3] == MyTeam()) then
+            capText:SetText("Take both towers first")
+        else
+            capText:SetText("Held by the " .. TEAM_NAME[owner] .. " - clear it to capture")
+        end
     else
-        tracker:SetPoint("TOPLEFT", launcher, "BOTTOMLEFT", 0, -4)
+        capBar:SetStatusBarColor(0.6, 0.6, 0.6)
+        capBar:SetValue(0)
+        if i == 2 and not (front.owners[1] == MyTeam() and front.owners[3] == MyTeam()) then
+            capText:SetText("Take both towers first")
+        else
+            capText:SetText("Neutral - stand here to capture")
+        end
+    end
+    capFrame:Show()
+end
+
+local function RefreshHUDState()
+    local now = GetTime()
+    if front.lock > 0 then
+        hudState:SetText("|cff88ff88" .. TEAM_NAME[front.lock] .. " victory|r - the front reopens in " .. Clock((front.lockAt or now) - now))
+    elseif front.siege > 0 then
+        local target = front.siege == 1 and "Crossroads Warlord" or "Northwatch Field Commander"
+        hudState:SetText("|cffff8000SIEGE!|r " .. TEAM_NAME[front.siege] .. " assault the " .. target)
+    elseif front.underdog > 0 then
+        hudState:SetText("The " .. TEAM_NAME[front.underdog] .. " rallies: +25% Renown, faster captures")
+    else
+        hudState:SetText("|cffaaaaaaObjectives, kills, battlegrounds and war boards push the bar|r")
     end
 end
 
 local function RefreshTracker()
+    -- domination bar
+    local dom = front.dom or 0
+    local aW = math.max(0.01, (dom + 100) / 200 * DOM_W)
+    domA:SetWidth(aW)
+    domH:SetWidth(math.max(0.01, DOM_W - aW))
+    if dom > 0 then
+        domText:SetText("Alliance " .. dom .. "%")
+    elseif dom < 0 then
+        domText:SetText("Horde " .. (-dom) .. "%")
+    else
+        domText:SetText("Contested")
+    end
+    domLeft:SetText(dom >= 100 and "|cff3399ffSIEGE|r" or "|cff3399ffAlliance|r")
+    domRight:SetText(dom <= -100 and "|cffff3333SIEGE|r" or "|cffff3333Horde|r")
+
     for i = 1, 3 do
-        local c = TEAM_COLOR[front.owners[i]] or TEAM_COLOR[0]
-        trackerRows[i].swatch:SetTexture(c[1], c[2], c[3])
-        if front.cap[i] > 0 and front.pct[i] > 0 then
-            trackerRows[i].pct:SetText((front.cap[i] == 1 and "|cff3399ff" or "|cffff3333") .. front.pct[i] .. "%|r")
+        local row = trackerRows[i]
+        local owner = front.owners[i]
+        if owner == 2 then
+            row.icon:SetTexture("Interface\\Icons\\INV_BannerPVP_01"); row.icon:SetVertexColor(1, 1, 1)
+        elseif owner == 1 then
+            row.icon:SetTexture("Interface\\Icons\\INV_BannerPVP_02"); row.icon:SetVertexColor(1, 1, 1)
         else
-            trackerRows[i].pct:SetText("")
+            row.icon:SetTexture("Interface\\Icons\\INV_BannerPVP_02"); row.icon:SetVertexColor(0.4, 0.4, 0.4)
+        end
+        local fortified = math.mod(math.floor((front.fort or 0) / math.pow(2, i - 1)), 2) == 1
+        if fortified then row.shield:Show() else row.shield:Hide() end
+        if front.cap[i] > 0 and front.pct[i] > 0 and front.cap[i] ~= owner then
+            row.state:SetText((front.cap[i] == 1 and "|cff3399ff" or "|cffff3333") .. "capturing " .. front.pct[i] .. "%|r")
+        elseif owner > 0 then
+            row.state:SetText((fortified and "fortified - " or "") .. "held")
+        else
+            row.state:SetText("neutral")
         end
     end
-    if front.siege > 0 then
-        trackerTitle:SetText("Barrens Front  |cffff8000SIEGE|r")
-    elseif front.lock > 0 then
-        trackerTitle:SetText("Barrens Front  |cff88ff88" .. TEAM_NAME[front.lock] .. " won|r")
-    else
-        trackerTitle:SetText("Barrens Front")
-    end
-    if front.inLake and not panel:IsVisible() then
-        PlaceTracker()
+
+    RefreshHUDState()
+    RefreshCapture()
+    if front.inLake then
+        if not tracker:IsVisible() then PlaceHUD() end
         tracker:Show()
     else
         tracker:Hide()
     end
 end
 
-panel:SetScript("OnShow", function() tracker:Hide() end)
-panel:SetScript("OnHide", function() RefreshTracker() end)
+-- live countdown for the lock timer
+local hudElapsed = 0
+tracker:SetScript("OnUpdate", function()
+    hudElapsed = hudElapsed + arg1
+    if hudElapsed >= 1 then
+        hudElapsed = 0
+        RefreshHUDState()
+    end
+end)
+
 
 -- ---------------------------------------------------------------- world map banners
 -- Barrens map bounds (WorldMapArea.dbc): left/right are world Y, top/bottom are world X
@@ -682,12 +856,13 @@ local function UpdatePins()
 end
 
 -- ---------------------------------------------------------------- server messages
--- "owner,capTeam,pct;owner,capTeam,pct;owner,capTeam,pct/siege/lock/lockSeconds/inLake[/underdog/fortifiedMask]"
+-- "owner,capTeam,pct;owner,capTeam,pct;owner,capTeam,pct/siege/lock/lockSeconds/inLake[/underdog/fortifiedMask/domination/nearObjective]"
 local function ParseFront(msg)
     local _, _, objs, siege, lock, lockSecs, member, rest = string.find(msg or "", "^(.-)/(%d)/(%d)/(%d+)/(%d)(.*)$")
     if not objs then return end
-    local _, _, underdog, fort = string.find(rest or "", "^/(%d)/(%d+)")
+    local _, _, underdog, fort, dom, near = string.find(rest or "", "^/(%d)/(%d+)/?(%-?%d*)/?(%d*)")
     front.underdog, front.fort = tonumber(underdog or 0), tonumber(fort or 0)
+    front.dom, front.near = tonumber(dom) or 0, tonumber(near) or 0
     local i = 0
     for owner, cap, pct in string.gfind(objs, "(%d),(%d),(%d+)") do
         i = i + 1
@@ -696,6 +871,7 @@ local function ParseFront(msg)
         end
     end
     front.siege, front.lock, front.lockSecs = tonumber(siege), tonumber(lock), tonumber(lockSecs)
+    front.lockAt = GetTime() + front.lockSecs
     front.inLake = (tonumber(member) == 1)
 
     UpdatePins()
@@ -775,6 +951,8 @@ SlashCmdList["RENOWNPVP"] = function(msg)
         launcher:Hide(); panel:Hide(); RenownPvPDB.hidden = true
     elseif msg == "show" then
         launcher:Show(); RenownPvPDB.hidden = nil
+    elseif msg == "hudreset" then
+        RenownPvPDB.hud = nil; if tracker:IsVisible() then PlaceHUD() end
     elseif msg == "reset" then
         RenownPvPDB.point = nil; RestoreLauncher()
     elseif msg == "" then

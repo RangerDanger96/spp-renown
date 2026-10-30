@@ -2,7 +2,7 @@
 ## Title: RenownBar
 ## Notes: Shows your Renown rank and progress like the experience bar. Shift-drag to move, /renownbar for options.
 ## Author: spp-renown
-## Version: 1.7
+## Version: 1.8
 ## SavedVariables: RenownBarDB, RenownPvPDB
 RenownBar.lua
 RenownPvP.lua

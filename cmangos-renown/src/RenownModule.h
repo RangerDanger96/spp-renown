@@ -5,6 +5,7 @@
 #include "RenownModuleConfig.h"
 
 #include <array>
+#include <atomic>
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -311,6 +312,15 @@ namespace cmangos_module
         uint32 m_rvrLockTeam = 0;
         time_t m_rvrLockUntil = 0;
         bool m_rvrDirty = true;
+        // Barrens domination: one tug-of-war bar fed by objectives, kills, battlegrounds and war board quests.
+        // Hundredths of a percent, +10000 = Alliance dominates, -10000 = Horde dominates. Full bar opens the siege.
+        std::atomic<int32> m_rvrDom{0};
+        uint32 m_rvrDomTimer = 0;
+        int32 m_rvrDomSent = 0;
+    public:
+        void RvRDominate(uint32 team, int32 amount);
+    private:
+        uint32 RvRNearObjective(const Player* player) const;
         bool m_rvrResetRequested = false;
 
         bool m_questsReady = false;
