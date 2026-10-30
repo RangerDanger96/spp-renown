@@ -559,6 +559,8 @@ namespace cmangos_module
     {
         for (Player* player : members)
         {
+            if (!RenownPlayerOk(player))
+                continue;
             if (player->IsInWorld() && player->GetMapId() == FRONT_MAP && player->GetMap())
             {
                 return player->GetMap();
@@ -665,6 +667,8 @@ namespace cmangos_module
         bool watched = false;
         for (Player* player : players)
         {
+            if (!RenownPlayerOk(player))
+                continue;
             if (player->isRealPlayer() && (OnFront(player) || RvRIsMember(player->GetObjectGuid().GetCounter())))
             {
                 watched = true;
@@ -737,6 +741,8 @@ namespace cmangos_module
                 Player* summoner = nullptr;
                 for (Player* p : members)
                 {
+                    if (!RenownPlayerOk(p))
+                        continue;
                     if (p->IsInWorld() && p->GetMapId() == FRONT_MAP)
                     {
                         summoner = p;
@@ -805,6 +811,8 @@ namespace cmangos_module
                 const uint32 winner = TeamOf(1 - side);
                 for (Player* p : members)
                 {
+                    if (!RenownPlayerOk(p))
+                        continue;
                     if (p->GetTeam() == winner && p->IsAlive() && Dist2(p->GetPositionX(), p->GetPositionY(), order.bearerPos[side][0], order.bearerPos[side][1]) <= 50.0f * 50.0f)
                     {
                         AddRenown(p, 120);
@@ -839,6 +847,8 @@ namespace cmangos_module
                 uint32 count = 0;
                 for (Player* p : members)
                 {
+                    if (!RenownPlayerOk(p))
+                        continue;
                     if (p->GetTeam() == o.owner && p->IsAlive() && Dist2(p->GetPositionX(), p->GetPositionY(), o.x, o.y) <= 60.0f * 60.0f)
                     {
                         AddRenown(p, 100);
@@ -871,6 +881,8 @@ namespace cmangos_module
                 const uint32 team = TeamOf(side);
                 for (Player* p : members)
                 {
+                    if (!RenownPlayerOk(p))
+                        continue;
                     if (p->GetTeam() == team && p->IsAlive() && Dist2(p->GetPositionX(), p->GetPositionY(), order.bearerPos[side][0], order.bearerPos[side][1]) <= 60.0f * 60.0f)
                     {
                         AddRenown(p, 50);
@@ -945,6 +957,8 @@ namespace cmangos_module
                 Player* summoner = nullptr;
                 for (Player* p : members)
                 {
+                    if (!RenownPlayerOk(p))
+                        continue;
                     if (p->GetTeam() == team && p->IsInWorld() && p->GetMapId() == FRONT_MAP)
                     {
                         summoner = p;
@@ -1019,6 +1033,8 @@ namespace cmangos_module
 
                         for (Player* p : members)
                         {
+                            if (!RenownPlayerOk(p))
+                                continue;
                             if (p->GetTeam() == team && p->IsAlive() && Dist2(p->GetPositionX(), p->GetPositionY(), caravan.lastPos[0], caravan.lastPos[1]) <= 50.0f * 50.0f)
                             {
                                 AddRenown(p, 60);
@@ -1061,6 +1077,8 @@ namespace cmangos_module
                 const uint32 enemy = TeamOf(1 - side);
                 for (Player* p : members)
                 {
+                    if (!RenownPlayerOk(p))
+                        continue;
                     if (p->GetTeam() == enemy && p->IsAlive() && Dist2(p->GetPositionX(), p->GetPositionY(), caravan.lastPos[0], caravan.lastPos[1]) <= 50.0f * 50.0f)
                     {
                         AddRenown(p, 80);
@@ -1128,6 +1146,8 @@ namespace cmangos_module
             Player* best = nullptr;
             for (Player* p : members)
             {
+                if (!RenownPlayerOk(p))
+                    continue;
                 const uint32 id = p->GetObjectGuid().GetCounter();
                 if (p->isRealPlayer() || Side(p->GetTeam()) != side || !p->IsAlive() || !m_rvrRoster.count(id))
                 {

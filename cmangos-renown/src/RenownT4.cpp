@@ -302,6 +302,8 @@ namespace cmangos_module
         std::unordered_set<uint32> seen;
         for (Player* player : players)
         {
+            if (!RenownPlayerOk(player))
+                continue;
             const uint32 id = player->GetObjectGuid().GetCounter();
             const bool inside = InPlaguelands(player);
             if (inside && !T4IsMember(id))
@@ -352,6 +354,8 @@ namespace cmangos_module
             const T4Point& t = T4_TOWERS[i];
             for (Player* p : members)
             {
+                if (!RenownPlayerOk(p))
+                    continue;
                 if (p->GetTeam() == owner && p->IsAlive() && Dist2(p->GetPositionX(), p->GetPositionY(), t.x, t.y) <= 80.0f * 80.0f)
                 {
                     AddRenown(p, config->t4CapturePoints);
@@ -422,6 +426,8 @@ namespace cmangos_module
             const uint32 owned[2] = { T4OwnedBy(ALLIANCE), T4OwnedBy(HORDE) };
             for (Player* p : members)
             {
+                if (!RenownPlayerOk(p))
+                    continue;
                 const uint32 n = owned[p->GetTeam() == ALLIANCE ? 0 : 1];
                 if (n && config->t4TickPoints && p->GetLevel() >= config->t4MinLevel)
                 {
@@ -455,6 +461,8 @@ namespace cmangos_module
         Player* summoner = nullptr;
         for (Player* p : members)
         {
+            if (!RenownPlayerOk(p))
+                continue;
             if (p->GetMapId() == T4_MAP)
             {
                 summoner = p;
@@ -531,6 +539,8 @@ namespace cmangos_module
         // Every winner on the front gets a bag; those at the kill a better one
         for (Player* p : members)
         {
+            if (!RenownPlayerOk(p))
+                continue;
             if (p->GetTeam() != team || !p->isRealPlayer())
             {
                 continue;
@@ -556,6 +566,8 @@ namespace cmangos_module
         std::vector<Player*> enlisted[2];
         for (Player* p : players)
         {
+            if (!RenownPlayerOk(p))
+                continue;
             if (!p->isRealPlayer() && m_t4Roster.count(p->GetObjectGuid().GetCounter()))
             {
                 const int side = p->GetTeam() == ALLIANCE ? 0 : 1;
@@ -608,6 +620,8 @@ namespace cmangos_module
             std::vector<Player*> candidates;
             for (Player* p : players)
             {
+                if (!RenownPlayerOk(p))
+                    continue;
                 const uint32 id = p->GetObjectGuid().GetCounter();
                 if (p->isRealPlayer() || p->GetTeam() != team || p->GetLevel() < config->t4MinLevel || id % 100 >= share ||
                     m_t4Roster.count(id) || T4IsMember(id) || !p->IsAlive() || p->IsInCombat() || p->InBattleGround() ||
@@ -697,6 +711,8 @@ namespace cmangos_module
         std::unordered_set<uint32> seen;
         for (Player* bot : players)
         {
+            if (!RenownPlayerOk(bot))
+                continue;
             if (bot->isRealPlayer())
             {
                 continue;

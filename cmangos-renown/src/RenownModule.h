@@ -15,9 +15,13 @@
 class ChatHandler;
 class Map;
 class Creature;
+class Player;
 
 namespace cmangos_module
 {
+    // true when the player is safely in a map (not logging out / mid far-teleport)
+    bool RenownPlayerOk(const Player* player);
+
     // Warhammer-style Renown: a PvP progression earned from kills, objectives and
     // battleground results. Ranks never decay and are stored per character.
     class RenownModule : public Module

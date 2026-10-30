@@ -22,6 +22,11 @@
 
 namespace cmangos_module
 {
+    bool RenownPlayerOk(const Player* player)
+    {
+        return player && player->IsInWorld() && player->GetMap() && !player->IsBeingTeleported();
+    }
+
     RenownModule::RenownModule()
     : Module("Renown", new RenownModuleConfig())
     {

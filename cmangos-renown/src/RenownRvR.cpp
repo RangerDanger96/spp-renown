@@ -536,6 +536,8 @@ namespace cmangos_module
         std::vector<Player*> enlisted[2];
         for (Player* player : players)
         {
+            if (!RenownPlayerOk(player))
+                continue;
             if (player->isRealPlayer())
             {
                 if (player->GetMapId() == RVR_MAP && (player->GetZoneId() == 17 || RvRIsMember(player->GetObjectGuid().GetCounter())))
@@ -610,6 +612,8 @@ namespace cmangos_module
             std::vector<Player*> candidates;
             for (Player* player : players)
             {
+                if (!RenownPlayerOk(player))
+                    continue;
                 const uint32 botId = player->GetObjectGuid().GetCounter();
                 if (player->isRealPlayer() || player->GetTeam() != team || player->GetLevel() > config->rvrMaxLevel ||
                     botId % 100 >= share || m_rvrRoster.count(botId) || RvRIsMember(botId))
@@ -737,6 +741,8 @@ namespace cmangos_module
 
         for (Player* bot : players)
         {
+            if (!RenownPlayerOk(bot))
+                continue;
             if (bot->isRealPlayer())
             {
                 continue;
@@ -907,6 +913,8 @@ namespace cmangos_module
     {
         for (Player* player : players)
         {
+            if (!RenownPlayerOk(player))
+                continue;
             const bool frontZone = (player->GetMapId() == RVR_MAP && player->GetZoneId() == 17) || (player->GetMapId() == 0 && player->GetZoneId() == 139);
             if (!frontZone || player->IsAlive() ||
                 !player->HasFlag(PLAYER_FLAGS, PLAYER_FLAGS_GHOST) || !player->GetMap())
@@ -988,6 +996,8 @@ namespace cmangos_module
 
         for (Player* player : players)
         {
+            if (!RenownPlayerOk(player))
+                continue;
             if (player->isRealPlayer() || player->GetLevel() > GetConfig()->fieldMountMaxLevel || player->GetMapId() != RVR_MAP)
             {
                 continue;
@@ -1100,6 +1110,8 @@ namespace cmangos_module
         std::vector<Player*> members;
         for (Player* player : players)
         {
+            if (!RenownPlayerOk(player))
+                continue;
             const uint32 playerId = player->GetObjectGuid().GetCounter();
             const bool inside = RvRInLakeArea(player);
             const bool member = RvRIsMember(playerId);
@@ -1185,6 +1197,8 @@ namespace cmangos_module
                 std::vector<Player*> nearby[2];
                 for (Player* player : members)
                 {
+                    if (!RenownPlayerOk(player))
+                        continue;
                     if (!player->IsAlive() || m_rvrChickens.count(player->GetObjectGuid().GetCounter()) || player->IsGameMaster())
                     {
                         continue;
@@ -1311,6 +1325,8 @@ namespace cmangos_module
                 m_rvrTickTimer = 0;
                 for (Player* player : members)
                 {
+                    if (!RenownPlayerOk(player))
+                        continue;
                     if (m_rvrChickens.count(player->GetObjectGuid().GetCounter()))
                     {
                         continue;
@@ -1364,6 +1380,8 @@ namespace cmangos_module
             // Everyone on the front plus the rest of the Barrens (for the world map banners)
             for (Player* player : players)
             {
+                if (!RenownPlayerOk(player))
+                    continue;
                 if (player->isRealPlayer() && player->GetMapId() == RVR_MAP &&
                     (player->GetZoneId() == 17 || RvRIsMember(player->GetObjectGuid().GetCounter())))
                 {
